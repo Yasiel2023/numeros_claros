@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Check, X } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 function AsceoRow({ item, onChange, onDelete }) {
   return (

@@ -2,12 +2,19 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Trash2, Check, X, ShoppingCart } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
+
+const FREQ_LABEL = { semanal: 'sem', quincenal: 'quin', mensual: 'mens' };
+const FREQ_CLASS = { semanal: 'freq-semanal', quincenal: 'freq-quincenal', mensual: 'freq-mensual' };
 
 function ItemRow({ item, onChange, onDelete }) {
+  const freq = item.frecuencia || 'semanal';
   return (
     <tr>
-      <td><span className="item-nombre">{item.nombre}</span></td>
+      <td>
+        <span className="item-nombre">{item.nombre}</span>
+        <span className={`freq-badge ${FREQ_CLASS[freq] || ''}`}>{FREQ_LABEL[freq] || freq}</span>
+      </td>
       <td>
         <input type="number" className="cell-input" value={item.previsto || ''} min="0"
           onChange={e => onChange({ ...item, previsto: parseFloat(e.target.value) || 0 })}
@@ -30,6 +37,7 @@ function SemanaBlock({ semana, idx, onChangeSemana, onDelete }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
   const [newPrev, setNewPrev] = useState('');
+  const [newFrec, setNewFrec] = useState('semanal');
 
   const items = semana.items || [];
   const totalPrev = items.reduce((s, it) => s + (it.previsto || 0), 0);
@@ -43,8 +51,8 @@ function SemanaBlock({ semana, idx, onChangeSemana, onDelete }) {
 
   const addItem = () => {
     if (!newNombre) return;
-    onChangeSemana({ ...semana, items: [...items, { nombre: newNombre, previsto: parseFloat(newPrev) || 0, real: 0 }] });
-    setNewNombre(''); setNewPrev(''); setShowAdd(false);
+    onChangeSemana({ ...semana, items: [...items, { nombre: newNombre, previsto: parseFloat(newPrev) || 0, real: 0, frecuencia: newFrec }] });
+    setNewNombre(''); setNewPrev(''); setNewFrec('semanal'); setShowAdd(false);
   };
 
   return (
@@ -67,8 +75,14 @@ function SemanaBlock({ semana, idx, onChangeSemana, onDelete }) {
         <div className="semana-body">
           {showAdd && (
             <div className="add-row-form">
-              <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Producto" className="add-input" />
+              <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Producto" className="add-input"
+                onKeyDown={e => e.key === 'Enter' && addItem()} />
               <input type="number" value={newPrev} onChange={e => setNewPrev(e.target.value)} placeholder="$ previsto" className="add-input short" />
+              <select value={newFrec} onChange={e => setNewFrec(e.target.value)} className="add-select">
+                <option value="semanal">Semanal</option>
+                <option value="quincenal">Quincenal</option>
+                <option value="mensual">Mensual</option>
+              </select>
               <button className="btn-confirm" onClick={addItem}><Check size={14}/></button>
               <button className="btn-cancel" onClick={() => setShowAdd(false)}><X size={14}/></button>
             </div>

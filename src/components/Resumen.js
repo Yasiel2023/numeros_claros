@@ -2,17 +2,16 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
-const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0);
+const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
+const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
 
 export default function Resumen({ mesData, onChange }) {
   if (!mesData) return null;
 
   const {
     ingresos = [], basicos = [], impuestos = [], semanas = [], asceo = [],
-    creditoUYU = 0, creditoUSD = 0,
-    metaAhorro = 0, guardado = 0,
-    guardadoMesAnterior = 0,
+    tarjetas = [],
+    objetivoAhorro = 0,
   } = mesData;
 
   // ── Calcular totales ──
@@ -31,11 +30,16 @@ export default function Resumen({ mesData, onChange }) {
   const totalComprasPrev = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.previsto || 0), 0), 0);
   const totalComprasReal = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.real || it.previsto || 0), 0), 0);
 
-  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev;
-  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalComprasReal;
+  const totalTarjetasUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasUSD = tarjetas.filter(t => t.moneda === 'USD' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
 
-  const saldo = totalIngReal - totalGastosPrev - creditoUYU;
+  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev;
+  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalComprasReal + totalTarjetasUYU;
+
+  // Ahorro real = ingresos reales − todos los gastos reales
+  const ahorroReal = totalIngReal - totalGastosReal;
   const saldoPct = totalIngReal > 0 ? Math.round((totalGastosPrev / totalIngReal) * 100) : 0;
+  const ahorroPct = objetivoAhorro > 0 ? Math.round((ahorroReal / objetivoAhorro) * 100) : 0;
 
   const chartData = [
     { name: 'Ingresos', prev: totalIngPrev, real: totalIngReal },
@@ -43,6 +47,7 @@ export default function Resumen({ mesData, onChange }) {
     { name: 'Impuestos',prev: totalImpPrev, real: totalImpPend },
     { name: 'Asceo',    prev: totalAscPrev, real: totalAscReal },
     { name: 'Compras',  prev: totalComprasPrev, real: totalComprasReal },
+    ...(totalTarjetasUYU > 0 ? [{ name: 'Tarjetas', prev: 0, real: totalTarjetasUYU }] : []),
   ];
 
   return (
@@ -86,17 +91,24 @@ export default function Resumen({ mesData, onChange }) {
                 <td>${fmt(totalComprasPrev)}</td>
                 <td>${fmt(totalComprasReal)}</td>
                 <td>{totalIngPrev > 0 ? Math.round(totalComprasPrev / totalIngPrev * 100) : 0}%</td>
-              </tr>
-              <tr className="totals-row">
+              </tr>              {totalTarjetasUYU > 0 && (
+                <tr>
+                  <td>💳 Tarjetas</td>
+                  <td>—</td>
+                  <td className="neg">${fmt(totalTarjetasUYU)}{totalTarjetasUSD > 0 && ` + ${fmtUSD(totalTarjetasUSD)}`}</td>
+                  <td>{totalIngReal > 0 ? Math.round(totalTarjetasUYU / totalIngReal * 100) : 0}%</td>
+                </tr>
+              )}              <tr className="totals-row">
                 <td>TOTAL GASTOS</td>
                 <td className="neg">${fmt(totalGastosPrev)}</td>
                 <td className={totalGastosReal > 0 ? 'neg' : 'pos'}>${fmt(totalGastosReal)}</td>
                 <td>{saldoPct}%</td>
               </tr>
               <tr className="row-saldo">
-                <td><strong>SALDO LIBRE</strong></td>
-                <td className={saldo >= 0 ? 'pos' : 'neg'} colSpan={2}><strong>${fmt(saldo)}</strong></td>
-                <td>{totalIngReal > 0 ? Math.round(saldo / totalIngReal * 100) : 0}%</td>
+                <td><strong>💰 AHORRO REAL</strong></td>
+                <td className={ahorroReal >= 0 ? 'pos' : 'neg'}><strong>${fmt(ahorroReal)}</strong></td>
+                <td className={ahorroReal >= 0 ? 'pos' : 'neg'}><strong>${fmt(ahorroReal)}</strong></td>
+                <td>{totalIngReal > 0 ? Math.round(ahorroReal / totalIngReal * 100) : 0}%</td>
               </tr>
             </tbody>
           </table>
@@ -122,62 +134,33 @@ export default function Resumen({ mesData, onChange }) {
         </div>
       </div>
 
-      {/* Crédito */}
-      <div className="credito-block">
-        <h3 className="sub-title">💳 Crédito pendiente</h3>
-        <div className="credito-row">
-          <div className="credito-item">
-            <label>Deuda tarjeta UYU $</label>
-            <input type="number" className="cell-input" value={creditoUYU || ''} min="0"
-              onChange={e => onChange({ ...mesData, creditoUYU: parseFloat(e.target.value) || 0 })}
-              placeholder="0" />
-          </div>
-          <div className="credito-item">
-            <label>Deuda tarjeta USD $</label>
-            <input type="number" className="cell-input" value={creditoUSD || ''} min="0" step="0.01"
-              onChange={e => onChange({ ...mesData, creditoUSD: parseFloat(e.target.value) || 0 })}
-              placeholder="0.00" />
-            <span className="usd-label">{fmtUSD(creditoUSD)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Guardado / Ahorro */}
+      {/* Ahorro del mes */}
       <div className="ahorro-block">
-        <h3 className="sub-title">💰 Ahorro y Meta</h3>
+        <h3 className="sub-title">💰 Ahorro del mes</h3>
         <div className="ahorro-inputs">
           <div className="credito-item">
-            <label>Meta ahorro anual $</label>
-            <input type="number" className="cell-input" value={metaAhorro || ''} min="0"
-              onChange={e => onChange({ ...mesData, metaAhorro: parseFloat(e.target.value) || 0 })}
+            <label>Objetivo de ahorro del mes $</label>
+            <input type="number" className="cell-input" value={objetivoAhorro || ''} min="0"
+              onChange={e => onChange({ ...mesData, objetivoAhorro: parseFloat(e.target.value) || 0 })}
               placeholder="0" />
           </div>
           <div className="credito-item">
-            <label>Guardado mes anterior $</label>
-            <input type="number" className="cell-input" value={guardadoMesAnterior || ''} min="0"
-              onChange={e => onChange({ ...mesData, guardadoMesAnterior: parseFloat(e.target.value) || 0 })}
-              placeholder="0" />
-          </div>
-          <div className="credito-item">
-            <label>Guardado este mes $</label>
-            <input type="number" className="cell-input" value={guardado || ''} min="0"
-              onChange={e => onChange({ ...mesData, guardado: parseFloat(e.target.value) || 0 })}
-              placeholder="0" />
+            <label>Ahorro real (calculado)</label>
+            <div className={`cell-readonly ${ahorroReal >= 0 ? 'pos' : 'neg'}`}>${fmt(ahorroReal)}</div>
           </div>
         </div>
 
         <div className="ahorro-total">
-          <span>Total acumulado: <strong className="pos">${fmt(guardadoMesAnterior + guardado)}</strong></span>
-          {metaAhorro > 0 && (
-            <>
-              <span>Meta: <strong>${fmt(metaAhorro)}</strong></span>
-              <span>Progreso: <strong className={guardadoMesAnterior + guardado >= metaAhorro ? 'pos' : ''}>{Math.min(100, Math.round((guardadoMesAnterior + guardado) / metaAhorro * 100))}%</strong></span>
-            </>
+          <span>Ingresos reales: <strong className="pos">${fmt(totalIngReal)}</strong></span>
+          <span>Gastos reales: <strong className="neg">${fmt(totalGastosReal)}</strong></span>
+          <span>Ahorro real: <strong className={ahorroReal >= 0 ? 'pos' : 'neg'}>${fmt(ahorroReal)}</strong></span>
+          {objetivoAhorro > 0 && (
+            <span>Objetivo: <strong>${fmt(objetivoAhorro)}</strong> — <strong className={ahorroPct >= 100 ? 'pos' : ''}>{ahorroPct}%</strong></span>
           )}
         </div>
-        {metaAhorro > 0 && (
+        {objetivoAhorro > 0 && (
           <div className="progress-bar big mt8">
-            <div className="progress-fill" style={{ width: Math.min(100, Math.round((guardadoMesAnterior + guardado) / metaAhorro * 100)) + '%', background: '#6366f1' }} />
+            <div className="progress-fill" style={{ width: Math.min(100, ahorroPct) + '%', background: ahorroReal >= objetivoAhorro ? '#0d9488' : '#6366f1' }} />
           </div>
         )}
       </div>

@@ -3,15 +3,15 @@ import React, { useMemo } from 'react';
 import { AlertTriangle, CheckCircle, Clock, TrendingUp, TrendingDown, DollarSign, Wallet } from 'lucide-react';
 import { MESES_ES } from '../constants';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 const fmtUSD = (n) => new Intl.NumberFormat('es-UY', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n || 0);
 
 export default function Dashboard({ mesData, mes, año, onIrA }) {
   if (!mesData) return <div className="loading-state">Cargando...</div>;
 
   const {
-    ingresos = [], basicos = [], impuestos = [], semanas = [],
-    creditoUYU = 0, creditoUSD = 0, metaAhorro = 0, guardado = 0,
+    ingresos = [], basicos = [], impuestos = [], semanas = [], asceo = [],
+    tarjetas = [], objetivoAhorro = 0,
   } = mesData;
 
   // ── Totales ingresos ──
@@ -28,15 +28,23 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
   const totalImpPrev = impuestos.filter(i => i.activo).reduce((s, i) => s + (i.previsto || 0), 0);
   const totalImpPend = impPend.reduce((s, i) => s + (i.real || 0), 0);
 
+  // ── Asceo ──
+  const totalAscReal = asceo.reduce((s, a) => s + (a.real || 0), 0);
+  const totalAscPrev = asceo.reduce((s, a) => s + (a.previsto || 0), 0);
+
   // ── Compras semanas ──
   const totalCompras = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.real || it.previsto || 0), 0), 0);
   const totalComprasPrev = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.previsto || 0), 0), 0);
 
   // ── Totales generales ──
-  const totalGastosPrev = totalBasPrev + totalImpPrev + totalComprasPrev;
+  const totalTarjetasUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasUSD = tarjetas.filter(t => t.moneda === 'USD' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev;
+  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalCompras + totalTarjetasUYU;
   const totalPendiente = totalBasPend + totalImpPend;
-  const saldo = totalIngReal - totalGastosPrev - creditoUYU;
-  const ahorroPct = metaAhorro > 0 ? Math.min(100, Math.round((guardado / metaAhorro) * 100)) : 0;
+  // Ahorro real = ingresos reales − todos los gastos reales
+  const ahorroReal = totalIngReal - totalGastosReal;
+  const ahorroPct = objetivoAhorro > 0 ? Math.round((ahorroReal / objetivoAhorro) * 100) : 0;
 
   const pendItems = [
     ...basicosPend.map(b => ({ ...b, tipo: 'básico' })),
@@ -70,20 +78,23 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
             <span className="dc-sub">Básicos + Impuestos + Compras</span>
           </div>
         </div>
-        <div className={`dash-card ${saldo >= 0 ? 'teal' : 'orange'}`}>
+        <div className={`dash-card ${ahorroReal >= 0 ? 'teal' : 'orange'}`}>
           <div className="dc-icon"><Wallet size={20}/></div>
           <div className="dc-body">
-            <span className="dc-label">Saldo disponible</span>
-            <span className="dc-val">${fmt(saldo)}</span>
-            <span className="dc-sub">{saldo >= 0 ? 'Para disfrute/ahorro' : '⚠ Déficit'}</span>
+            <span className="dc-label">Ahorro real del mes</span>
+            <span className="dc-val">${fmt(ahorroReal)}</span>
+            <span className="dc-sub">{ahorroReal >= 0 ? 'Ingresos − gastos reales' : '⚠ Gastos superan ingresos'}</span>
           </div>
         </div>
         <div className="dash-card purple">
           <div className="dc-icon"><DollarSign size={20}/></div>
           <div className="dc-body">
-            <span className="dc-label">Crédito pendiente</span>
-            <span className="dc-val">${fmt(creditoUYU)}</span>
-            <span className="dc-sub">USD: {fmtUSD(creditoUSD)}</span>
+            <span className="dc-label">Tarjetas pendiente</span>
+            <span className="dc-val">${fmt(totalTarjetasUYU)}</span>
+            {totalTarjetasUSD > 0
+              ? <span className="dc-sub">USD: {fmtUSD(totalTarjetasUSD)}</span>
+              : <span className="dc-sub">{tarjetas.length} tarjeta{tarjetas.length !== 1 ? 's' : ''}</span>
+            }
           </div>
         </div>
       </div>
@@ -160,27 +171,35 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
       {/* ── AHORRO ── */}
       <div className="card ahorro-card">
         <div className="card-header-row">
-          <h2 className="card-title">💰 Meta de ahorro {año}</h2>
-          <span className="badge-purple">{ahorroPct}%</span>
+          <h2 className="card-title">💰 Ahorro del mes</h2>
+          {objetivoAhorro > 0 && <span className="badge-purple">{ahorroPct}%</span>}
         </div>
         <div className="ahorro-body">
           <div className="ahorro-nums">
             <div>
-              <span className="an-label">Guardado</span>
-              <span className="an-val green">${fmt(guardado)}</span>
+              <span className="an-label">Ahorro real</span>
+              <span className={`an-val ${ahorroReal >= 0 ? 'green' : 'orange'}`}>${fmt(ahorroReal)}</span>
             </div>
-            <div>
-              <span className="an-label">Meta</span>
-              <span className="an-val">${fmt(metaAhorro)}</span>
-            </div>
-            <div>
-              <span className="an-label">Resta</span>
-              <span className="an-val orange">${fmt(Math.max(0, metaAhorro - guardado))}</span>
-            </div>
+            {objetivoAhorro > 0 && (
+              <>
+                <div>
+                  <span className="an-label">Objetivo mes</span>
+                  <span className="an-val">${fmt(objetivoAhorro)}</span>
+                </div>
+                <div>
+                  <span className="an-label">{ahorroReal >= objetivoAhorro ? '✓ Superado' : 'Faltan'}</span>
+                  <span className={`an-val ${ahorroReal >= objetivoAhorro ? 'green' : 'orange'}`}>
+                    ${fmt(Math.abs(objetivoAhorro - ahorroReal))}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
-          <div className="progress-bar big">
-            <div className="progress-fill" style={{ width: ahorroPct + '%', background: '#6366f1' }}/>
-          </div>
+          {objetivoAhorro > 0 && (
+            <div className="progress-bar big">
+              <div className="progress-fill" style={{ width: Math.min(100, ahorroPct) + '%', background: ahorroReal >= objetivoAhorro ? '#0d9488' : '#6366f1' }}/>
+            </div>
+          )}
         </div>
       </div>
     </div>

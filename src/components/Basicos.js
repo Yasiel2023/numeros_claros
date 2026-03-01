@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Check, X, CheckCircle2 } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n || 0);
+const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 // real > 0 = aún debe esa cantidad; real = 0 = pagado
 function BasicoRow({ item, onChange, onDelete, onPagar }) {
