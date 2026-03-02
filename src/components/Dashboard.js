@@ -36,19 +36,26 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
   const totalCompras = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.real || it.previsto || 0), 0), 0);
   const totalComprasPrev = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.previsto || 0), 0), 0);
 
+  // ── Tarjetas ──
+  const totalTarjetasPrevUYU = tarjetas.filter(t => t.moneda === 'UYU').reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPendUYU = tarjetas.filter(t => t.moneda === 'UYU' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPrevUSD = tarjetas.filter(t => t.moneda === 'USD').reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPendUSD = tarjetas.filter(t => t.moneda === 'USD' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+
   // ── Totales generales ──
-  const totalTarjetasUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasUSD = tarjetas.filter(t => t.moneda === 'USD' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev;
-  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalCompras + totalTarjetasUYU;
-  const totalPendiente = totalBasPend + totalImpPend;
+  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev + totalTarjetasPrevUYU;
+  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalCompras + totalTarjetasPrevUYU;
+  const totalPendiente = totalBasPend + totalImpPend + totalTarjetasPendUYU;
   // Ahorro real = ingresos reales − todos los gastos reales
   const ahorroReal = totalIngReal - totalGastosReal;
   const ahorroPct = objetivoAhorro > 0 ? Math.round((ahorroReal / objetivoAhorro) * 100) : 0;
 
+  const tarjetasPend = tarjetas.filter(t => !t.pagado && (t.monto || 0) > 0);
+
   const pendItems = [
     ...basicosPend.map(b => ({ ...b, tipo: 'básico' })),
     ...impPend.map(i => ({ ...i, tipo: 'impuesto' })),
+    ...tarjetasPend.map(t => ({ nombre: t.nombre, previsto: t.monto, real: t.monto, moneda: t.moneda, tipo: 'tarjeta' })),
   ].sort((a, b) => (b.real || 0) - (a.real || 0));
 
   return (
@@ -75,7 +82,7 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
           <div className="dc-body">
             <span className="dc-label">Gastos previstos</span>
             <span className="dc-val">${fmt(totalGastosPrev)}</span>
-            <span className="dc-sub">Básicos + Impuestos + Compras</span>
+            <span className="dc-sub">Básicos + Impuestos + Tarjetas + Compras</span>
           </div>
         </div>
         <div className={`dash-card ${ahorroReal >= 0 ? 'teal' : 'orange'}`}>
@@ -90,10 +97,10 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
           <div className="dc-icon"><DollarSign size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Tarjetas pendiente</span>
-            <span className="dc-val">${fmt(totalTarjetasUYU)}</span>
-            {totalTarjetasUSD > 0
-              ? <span className="dc-sub">USD: {fmtUSD(totalTarjetasUSD)}</span>
-              : <span className="dc-sub">{tarjetas.length} tarjeta{tarjetas.length !== 1 ? 's' : ''}</span>
+            <span className="dc-val">${fmt(totalTarjetasPendUYU)}</span>
+            {totalTarjetasPendUSD > 0
+              ? <span className="dc-sub">USD pendiente: {fmtUSD(totalTarjetasPendUSD)}</span>
+              : <span className="dc-sub">{tarjetasPend.length} de {tarjetas.length} pendiente{tarjetasPend.length !== 1 ? 's' : ''}</span>
             }
           </div>
         </div>
@@ -120,7 +127,7 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
                 <div key={i} className="pend-item">
                   <div className="pend-info">
                     <span className="pend-name">{item.nombre}</span>
-                    <span className={`pend-tipo ${item.tipo === 'básico' ? 'tipo-bas' : 'tipo-imp'}`}>{item.tipo}</span>
+                    <span className={`pend-tipo ${item.tipo === 'básico' ? 'tipo-bas' : item.tipo === 'impuesto' ? 'tipo-imp' : 'tipo-tarj'}`}>{item.tipo}</span>
                   </div>
                   <div className="pend-montos">
                     <span className="pend-real">${fmt(item.real)}</span>
@@ -134,6 +141,7 @@ export default function Dashboard({ mesData, mes, año, onIrA }) {
           <div className="pend-actions">
             <button className="btn-sm-outline" onClick={() => onIrA('basicos')}>Ver básicos</button>
             <button className="btn-sm-outline" onClick={() => onIrA('impuestos')}>Ver impuestos</button>
+            <button className="btn-sm-outline" onClick={() => onIrA('tarjetas')}>Ver tarjetas</button>
           </div>
         </div>
 

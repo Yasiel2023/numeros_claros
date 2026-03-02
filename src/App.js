@@ -20,6 +20,7 @@ import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
 import InvitacionesBanner from './components/InvitacionesBanner';
 import Tarjetas from './components/Tarjetas';
+import NuevoMesModal from './components/NuevoMesModal';
 import './App.css';
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
@@ -108,6 +109,10 @@ function AppInterna() {
   const [creando, setCreando] = useState(false);
   // ── Plantillas globales (colección /defaults en RTDB) ────────
   const [defaultsTemplates, setDefaultsTemplates] = useState([]); // [{id, nombre, data}]
+  // ── Plantillas del usuario (/user_templates/{uid}/) ───────────
+  const [userTemplates, setUserTemplates] = useState([]); // [{id, nombre, data}]
+  // ── Estado modal nuevo mes ────────────────────────────────────
+  const [nuevoMesPendiente, setNuevoMesPendiente] = useState(false);
   const saveTimer = useRef(null);
 
   // Clave del mes en RTDB: "2026_2" (año_mesIndex0basado)
@@ -137,6 +142,28 @@ function AppInterna() {
     };
     cargarTemplates();
   }, []);
+
+  // ── Cargar plantillas del usuario /user_templates/{uid} ────────
+  useEffect(() => {
+    if (!user) return;
+    const cargarUserTemplates = async () => {
+      try {
+        const snap = await get(ref(db, `user_templates/${user.uid}`));
+        if (snap.exists()) {
+          const data = snap.val();
+          const lista = Object.keys(data).map(id => ({
+            id,
+            nombre: data[id]._meta?.nombre || id,
+            data: data[id],
+          }));
+          setUserTemplates(lista);
+        }
+      } catch (e) {
+        console.error('Error cargando plantillas de usuario:', e);
+      }
+    };
+    cargarUserTemplates();
+  }, [user]);
 
   // ── Seed de defaults locales para primera inicialización ──────
   // Solo se usa si Firebase no tiene _defaults todavía
@@ -287,9 +314,14 @@ function AppInterna() {
     try {
       const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${mesKey}`));
       if (snap.exists()) {
+        setNuevoMesPendiente(false);
         setMesData(normalizeMesData(snap.val()));
       } else {
-        setMesData(initMesData(año, mes, defaults));
+        // Mes sin datos: mostrar modal para seleccionar plantilla
+        setMesData(null);
+        setNuevoMesPendiente(true);
+        setLoading(false);
+        return;
       }
     } catch (e) {
       console.error('Error cargando:', e);
@@ -319,6 +351,22 @@ function AppInterna() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => autoGuardar(newData), 1200);
   }, [autoGuardar]);
+
+  // ── Confirmar nuevo mes desde modal ─────────────────────────────────────────
+  const confirmarNuevoMes = useCallback((templateId, objetivo) => {
+    let defaultsParaMes = defaults;
+    if (templateId) {
+      const tpl = userTemplates.find(t => t.id === templateId);
+      if (tpl) {
+        // Excluir _meta y objetivoAhorro de la plantilla al usar como defaults
+        const { _meta: _ignored, objetivoAhorro: _obj, ...tplData } = tpl.data;
+        defaultsParaMes = tplData;
+      }
+    }
+    const data = { ...initMesData(año, mes, defaultsParaMes), objetivoAhorro: objetivo || 0 };
+    setNuevoMesPendiente(false);
+    updateMesData(data);
+  }, [año, mes, defaults, userTemplates, updateMesData]); // eslint-disable-line
 
   // ── Navegar meses ─────────────────────────────────────────────
   const mesAnterior = () => {
@@ -521,11 +569,21 @@ function AppInterna() {
           </div>
         </header>
 
+        {/* Modal nuevo mes */}
+        {nuevoMesPendiente && (
+          <NuevoMesModal
+            mesLabel={`${MESES_ES[mes]} ${año}`}
+            userTemplates={userTemplates}
+            onConfirm={confirmarNuevoMes}
+            onCancel={() => { setNuevoMesPendiente(false); setLoading(false); }}
+          />
+        )}
+
         {/* Contenido */}
         <main className="main-content">
           {vista === 'plantillas' ? (
             <DefaultsManager />
-          ) : loading ? (
+          ) : loading || nuevoMesPendiente ? (
             <div className="loading-state"><Loader size={28} className="spin"/> Cargando {MESES_ES[mes]}...</div>
           ) : (
             <>

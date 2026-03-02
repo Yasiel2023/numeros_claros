@@ -30,11 +30,13 @@ export default function Resumen({ mesData, onChange }) {
   const totalComprasPrev = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.previsto || 0), 0), 0);
   const totalComprasReal = semanas.reduce((s, sem) => s + sem.items.reduce((ss, it) => ss + (it.real || it.previsto || 0), 0), 0);
 
-  const totalTarjetasUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasUSD = tarjetas.filter(t => t.moneda === 'USD' && t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPrevUYU = tarjetas.filter(t => t.moneda === 'UYU').reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPendUYU = tarjetas.filter(t => t.moneda === 'UYU' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPrevUSD = tarjetas.filter(t => t.moneda === 'USD').reduce((s, t) => s + (t.monto || 0), 0);
+  const totalTarjetasPendUSD = tarjetas.filter(t => t.moneda === 'USD' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
 
-  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev;
-  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalComprasReal + totalTarjetasUYU;
+  const totalGastosPrev = totalBasPrev + totalImpPrev + totalAscPrev + totalComprasPrev + totalTarjetasPrevUYU;
+  const totalGastosReal = totalBasPend + totalImpPend + totalAscReal + totalComprasReal + totalTarjetasPrevUYU;
 
   // Ahorro real = ingresos reales − todos los gastos reales
   const ahorroReal = totalIngReal - totalGastosReal;
@@ -47,7 +49,7 @@ export default function Resumen({ mesData, onChange }) {
     { name: 'Impuestos',prev: totalImpPrev, real: totalImpPend },
     { name: 'Asceo',    prev: totalAscPrev, real: totalAscReal },
     { name: 'Compras',  prev: totalComprasPrev, real: totalComprasReal },
-    ...(totalTarjetasUYU > 0 ? [{ name: 'Tarjetas', prev: 0, real: totalTarjetasUYU }] : []),
+    { name: 'Tarjetas', prev: totalTarjetasPrevUYU, real: totalTarjetasPendUYU },
   ];
 
   return (
@@ -91,14 +93,16 @@ export default function Resumen({ mesData, onChange }) {
                 <td>${fmt(totalComprasPrev)}</td>
                 <td>${fmt(totalComprasReal)}</td>
                 <td>{totalIngPrev > 0 ? Math.round(totalComprasPrev / totalIngPrev * 100) : 0}%</td>
-              </tr>              {totalTarjetasUYU > 0 && (
-                <tr>
-                  <td>💳 Tarjetas</td>
-                  <td>—</td>
-                  <td className="neg">${fmt(totalTarjetasUYU)}{totalTarjetasUSD > 0 && ` + ${fmtUSD(totalTarjetasUSD)}`}</td>
-                  <td>{totalIngReal > 0 ? Math.round(totalTarjetasUYU / totalIngReal * 100) : 0}%</td>
-                </tr>
-              )}              <tr className="totals-row">
+              </tr>
+              <tr>
+                <td>💳 Tarjetas</td>
+                <td>${fmt(totalTarjetasPrevUYU)}{totalTarjetasPrevUSD > 0 && ` + ${fmtUSD(totalTarjetasPrevUSD)}`}</td>
+                <td className={totalTarjetasPendUYU > 0 ? 'neg' : 'pos'}>
+                  ${fmt(totalTarjetasPendUYU)}{totalTarjetasPendUSD > 0 && ` + ${fmtUSD(totalTarjetasPendUSD)}`}
+                </td>
+                <td>{totalIngPrev > 0 ? Math.round(totalTarjetasPrevUYU / totalIngPrev * 100) : 0}%</td>
+              </tr>
+              <tr className="totals-row">
                 <td>TOTAL GASTOS</td>
                 <td className="neg">${fmt(totalGastosPrev)}</td>
                 <td className={totalGastosReal > 0 ? 'neg' : 'pos'}>${fmt(totalGastosReal)}</td>
