@@ -3,13 +3,60 @@ import React, { useState, useEffect } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Trash2, Save, Loader, Copy, Target, ChevronRight, FileText, AlertCircle } from 'lucide-react';
+import { FRECUENCIAS_GRUPO } from '../constants';
+import { Plus, Trash2, Save, Loader, Copy, Target, ChevronRight, FileText, AlertCircle, Check, X, Download } from 'lucide-react';
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
-const FRECUENCIAS = ['mensual', 'bimestral', 'trimestral', 'semestral', 'anual'];
-const FRECUENCIAS_COMPRA = ['semanal', 'quincenal', 'mensual'];
+// Campos de item de un grupo (todos iguales, la frecuencia es del grupo, no del item)
+const camposForFrecuencia = () => [
+  { key: 'nombre',   label: 'Nombre',   type: 'text'   },
+  { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
+];
+
+// Multiplicador mensual estimado
+const multFrecuencia = (f) =>
+  f === 'quincenal' ? 2 : f === 'cada10dias' ? 3 : f === 'semanal' ? 4 : 1;
+
+const ICONOS_GRUPO = ['🏠','🧾','🛒','🧴','🎉','💡','🚗','🎓','🏥','🐾','🍽️','🎮','💪','📦'];
+
+// Formulario para agregar un nuevo grupo a una plantilla
+function NuevoGrupoForm({ onAdd }) {
+  const [show, setShow]           = useState(false);
+  const [nombre, setNombre]       = useState('');
+  const [icono, setIcono]         = useState('📦');
+  const [frecuencia, setFrecuencia] = useState('mensual');
+
+  const add = () => {
+    if (!nombre.trim()) return;
+    const id = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20) + '_' + Date.now().toString(36).slice(-4);
+    onAdd({ id, nombre: nombre.trim(), icono, frecuencia, items: [] });
+    setNombre(''); setIcono('📦'); setFrecuencia('mensual'); setShow(false);
+  };
+
+  if (!show) return (
+    <button className="dm-add-grupo-btn" onClick={() => setShow(true)}>
+      <Plus size={13} /> Agregar grupo de gastos
+    </button>
+  );
+
+  return (
+    <div className="dm-nuevo-grupo-form">
+      <input value={nombre} onChange={e => setNombre(e.target.value)}
+        placeholder="Nombre del grupo" className="dm-input" autoFocus />
+      <input value={icono} onChange={e => setIcono(e.target.value)}
+        placeholder="📦" className="dm-input" style={{ width: 48 }} />
+      <select value={frecuencia} onChange={e => setFrecuencia(e.target.value)} className="dm-input dm-select">
+        {FRECUENCIAS_GRUPO.map(f => (
+          <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>
+        ))}
+      </select>
+      <button className="dm-add-row" onClick={add}><Check size={12} /> Crear</button>
+      <button className="dm-del-row" onClick={() => setShow(false)}><X size={12} /></button>
+    </div>
+  );
+}
 
 function toArray(val) {
   if (!val) return [];
@@ -152,14 +199,12 @@ function PlantillaPanel({ dbPath }) {
     if (!nombre) return;
     setCreando(true);
     try {
-      const { BASICOS_DEFAULT, IMPUESTOS_DEFAULT, ASCEO_DEFAULT, COMPRAS_SEMANA_DEFAULT, INGRESOS_FIJOS } = require('../constants');
       const slug = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
       const id = `${slug}_${Date.now().toString(36)}`;
       const data = {
         _meta: { nombre, creadoEn: new Date().toISOString() },
-        ingresos: [...INGRESOS_FIJOS.map(i => ({ ...i, previsto: 0 })), { nombre: 'Otro', esFijo: false, previsto: 0 }],
-        basicos: BASICOS_DEFAULT, impuestos: IMPUESTOS_DEFAULT,
-        asceo: ASCEO_DEFAULT, semanas_items: COMPRAS_SEMANA_DEFAULT,
+        ingresos: [],
+        grupos_gastos: [],
       };
       await set(ref(db, `${dbPath}/${id}`), data);
       const nuevo = { id, nombre, data };
@@ -233,14 +278,25 @@ function PlantillaPanel({ dbPath }) {
           </div>
           <SeccionItems title="Ingresos" items={sec('ingresos')} onChange={v => setField('ingresos', v)}
             campos={[{ key: 'nombre', label: 'Nombre', type: 'text' }, { key: 'esFijo', label: 'Fijo', type: 'checkbox', default: false }, { key: 'previsto', label: 'Previsto', type: 'number', default: 0 }]} />
-          <SeccionItems title="Básicos" items={sec('basicos')} onChange={v => setField('basicos', v)}
-            campos={[{ key: 'nombre', label: 'Nombre', type: 'text' }, { key: 'previsto', label: 'Previsto', type: 'number', default: 0 }]} />
-          <SeccionItems title="Impuestos" items={sec('impuestos')} onChange={v => setField('impuestos', v)}
-            campos={[{ key: 'nombre', label: 'Nombre', type: 'text' }, { key: 'previsto', label: 'Previsto', type: 'number', default: 0 }, { key: 'frecuencia', label: 'Frecuencia', type: 'select', options: FRECUENCIAS, default: 'mensual' }]} />
-          <SeccionItems title="Aseo" items={sec('asceo')} onChange={v => setField('asceo', v)}
-            campos={[{ key: 'nombre', label: 'Nombre', type: 'text' }, { key: 'previsto', label: 'Previsto', type: 'number', default: 0 }]} />
-          <SeccionItems title="Compras semanales (Ã­tems base)" items={sec('semanas_items')} onChange={v => setField('semanas_items', v)}
-            campos={[{ key: 'nombre', label: 'Nombre', type: 'text' }, { key: 'previsto', label: 'Previsto', type: 'number', default: 0 }, { key: 'frecuencia', label: 'Frecuencia', type: 'select', options: FRECUENCIAS_COMPRA, default: 'semanal' }]} />
+          {toArray(editing?.grupos_gastos || []).map((grupo, gIdx) => {
+            const frecLabel = FRECUENCIAS_GRUPO.find(f => f.value === grupo.frecuencia)?.label || grupo.frecuencia || '';
+            return (
+              <div key={grupo.id || gIdx} className="dm-grupo-section">
+                <div className="dm-grupo-header">
+                  <span>{grupo.icono} {grupo.nombre}</span>
+                  <span className="dm-grupo-tipo">{frecLabel}</span>
+                  <button className="dm-del-row" style={{ marginLeft: 'auto' }}
+                    onClick={() => setField('grupos_gastos', toArray(editing.grupos_gastos).filter((_, i) => i !== gIdx))}
+                  ><Trash2 size={11} /></button>
+                </div>
+                <SeccionItems title="" items={toArray(grupo.items || [])}
+                  onChange={v => setField('grupos_gastos', toArray(editing.grupos_gastos).map((g, i) => i === gIdx ? { ...g, items: v } : g))}
+                  campos={camposForFrecuencia()}
+                />
+              </div>
+            );
+          })}
+          <NuevoGrupoForm onAdd={g => setField('grupos_gastos', [...toArray(editing?.grupos_gastos || []), g])} />
         </div>
       ) : (
         <div className="dm-right dm-right-empty"><p>CreÃ¡ tu primera plantilla â†’</p></div>
@@ -263,6 +319,7 @@ function UserTemplatesManager({ dbPath }) {
   const [confirmDel, setConfirmDel]   = useState(false);
   const [duplicando, setDuplicando]   = useState(false);
   const [seccionAbierta, setSeccionAbierta] = useState('ingresos');
+  const [migrandoGeneral, setMigrandoGeneral] = useState(false);
 
   useEffect(() => {
     if (!dbPath) return;
@@ -318,15 +375,13 @@ function UserTemplatesManager({ dbPath }) {
     if (!nombre) return;
     setCreando(true);
     try {
-      const { BASICOS_DEFAULT, IMPUESTOS_DEFAULT, ASCEO_DEFAULT, COMPRAS_SEMANA_DEFAULT, INGRESOS_FIJOS } = require('../constants');
       const slug = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
       const id = `${slug}_${Date.now().toString(36)}`;
       const data = {
         _meta: { nombre, creadoEn: new Date().toISOString() },
         objetivoAhorro: 0,
-        ingresos: [...INGRESOS_FIJOS.map(i => ({ ...i, previsto: 0 })), { nombre: 'Otro', esFijo: false, previsto: 0 }],
-        basicos: BASICOS_DEFAULT, impuestos: IMPUESTOS_DEFAULT,
-        asceo: ASCEO_DEFAULT, semanas_items: COMPRAS_SEMANA_DEFAULT,
+        ingresos: [],
+        grupos_gastos: [],
       };
       await set(ref(db, `${dbPath}/${id}`), data);
       const nuevo = { id, nombre, data };
@@ -335,6 +390,30 @@ function UserTemplatesManager({ dbPath }) {
       setNuevaNombre(''); setSaved(false); setDirty(false);
     } catch (e) { console.error('Error creando plantilla:', e); }
     setCreando(false);
+  };
+
+  // Migrar plantilla General -> mis plantillas
+  const migrarDesdeGeneral = async () => {
+    setMigrandoGeneral(true);
+    try {
+      const snap = await get(ref(db, 'defaults/general'));
+      if (!snap.exists()) { alert('No hay una plantilla General configurada todavía.'); return; }
+      const genData = snap.val();
+      const nombre = 'Plantilla General (migrada)';
+      const slug = 'general_migrada';
+      const id = `${slug}_${Date.now().toString(36)}`;
+      const data = {
+        ...JSON.parse(JSON.stringify(genData)),
+        _meta: { nombre, creadoEn: new Date().toISOString() },
+        objetivoAhorro: genData.objetivoAhorro || 0,
+      };
+      await set(ref(db, `${dbPath}/${id}`), data);
+      const nuevo = { id, nombre, data };
+      setTemplates(prev => [...prev, nuevo]);
+      setSelected(id); setEditing(JSON.parse(JSON.stringify(data)));
+      setSaved(false); setDirty(false);
+    } catch (e) { console.error('Error migrando desde General:', e); }
+    setMigrandoGeneral(false);
   };
 
   const duplicarPlantilla = async () => {
@@ -373,17 +452,12 @@ function UserTemplatesManager({ dbPath }) {
   // Resumen de totales previstos de la plantilla
   const calcTotales = (ed) => {
     if (!ed) return { ing: 0, gas: 0 };
-    const ing = toArray(ed.ingresos).reduce((s, i) => s + (i.previsto || 0), 0);
-    const bas = toArray(ed.basicos).reduce((s, b) => s + (b.previsto || 0), 0);
-    const imp = toArray(ed.impuestos).filter(i => !i.frecuencia || i.frecuencia === 'mensual')
-                  .reduce((s, i) => s + (i.previsto || 0), 0);
-    const asc = toArray(ed.asceo).reduce((s, a) => s + (a.previsto || 0), 0);
-    const sem = toArray(ed.semanas_items).reduce((s, it) => {
-      const f = it.frecuencia || 'semanal';
-      const mult = f === 'semanal' ? 4 : f === 'quincenal' ? 2 : 1;
-      return s + (it.previsto || 0) * mult;
+    const ing  = toArray(ed.ingresos).reduce((s, i) => s + (i.previsto || 0), 0);
+    const gas  = toArray(ed.grupos_gastos || []).reduce((total, g) => {
+      const m = multFrecuencia(g.frecuencia || 'mensual');
+      return total + toArray(g.items || []).reduce((s, it) => s + (it.previsto || 0), 0) * m;
     }, 0);
-    return { ing, gas: bas + imp + asc + sem };
+    return { ing, gas };
   };
 
   if (loading) return <div className="loading-state"><Loader size={24} className="spin" /> Cargando mis plantillas...</div>;
@@ -469,6 +543,18 @@ function UserTemplatesManager({ dbPath }) {
             {creando ? <Loader size={13} className="spin" /> : <Plus size={13} />}
           </button>
         </div>
+
+        {/* Migrar desde General */}
+        <button
+          className="dm-migrar-btn"
+          onClick={migrarDesdeGeneral}
+          disabled={migrandoGeneral}
+          title="Importar la plantilla Global como plantilla personal"
+        >
+          {migrandoGeneral
+            ? <><Loader size={12} className="spin" /> Importando...</>
+            : <><Download size={12} /> Importar desde General</>}
+        </button>
       </aside>
 
       {/* â”€â”€ Panel derecho: editor â”€â”€ */}
@@ -559,60 +645,62 @@ function UserTemplatesManager({ dbPath }) {
 
           {/* â”€â”€ Secciones con acordeÃ³n â”€â”€ */}
           <div className="utm-accordion">
-            {[
-              { key: 'ingresos', label: 'Ingresos', campos: [
-                { key: 'nombre', label: 'Nombre', type: 'text' },
-                { key: 'esFijo', label: 'Fijo', type: 'checkbox', default: false },
-                { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
-              ]},
-              { key: 'basicos', label: 'Gastos Básicos', campos: [
-                { key: 'nombre', label: 'Nombre', type: 'text' },
-                { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
-              ]},
-              { key: 'impuestos', label: 'Impuestos', campos: [
-                { key: 'nombre', label: 'Nombre', type: 'text' },
-                { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
-                { key: 'frecuencia', label: 'Frecuencia', type: 'select', options: FRECUENCIAS, default: 'mensual' },
-              ]},
-              { key: 'asceo', label: 'Aseo', campos: [
-                { key: 'nombre', label: 'Nombre', type: 'text' },
-                { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
-              ]},
-              { key: 'semanas_items', label: 'Compras semanales', campos: [
-                { key: 'nombre', label: 'Nombre', type: 'text' },
-                { key: 'previsto', label: 'Previsto $', type: 'number', default: 0 },
-                { key: 'frecuencia', label: 'Frecuencia', type: 'select', options: FRECUENCIAS_COMPRA, default: 'semanal' },
-              ]},
-            ].map(({ key, label, campos }) => {
-              const items = sec(key);
-              const isOpen = seccionAbierta === key;
-              const total = items.reduce((s, it) => {
-                if (key === 'semanas_items') {
-                  const f = it.frecuencia || 'semanal';
-                  const m = f === 'semanal' ? 4 : f === 'quincenal' ? 2 : 1;
-                  return s + (it.previsto || 0) * m;
-                }
-                return s + (it.previsto || 0);
-              }, 0);
+            {(() => {
+              const items = sec('ingresos');
+              const isOpen = seccionAbierta === 'ingresos';
+              const total = items.reduce((s, it) => s + (it.previsto || 0), 0);
               return (
-                <div key={key} className="utm-acc-section">
-                  <button
-                    className={`utm-acc-header ${isOpen ? 'open' : ''}`}
-                    onClick={() => setSeccionAbierta(isOpen ? null : key)}
-                  >
+                <div key="ingresos" className="utm-acc-section">
+                  <button className={`utm-acc-header ${isOpen ? 'open' : ''}`} onClick={() => setSeccionAbierta(isOpen ? null : 'ingresos')}>
                     <div className="utm-acc-left">
                       <ChevronRight size={14} className={`utm-acc-chevron ${isOpen ? 'rotated' : ''}`} />
-                      <span className="utm-acc-label">{label}</span>
-                      <span className="utm-acc-count">{items.length} I­tems</span>
+                      <span className="utm-acc-label">Ingresos</span>
+                      <span className="utm-acc-count">{items.length} ítems</span>
                     </div>
-                    <span className="utm-acc-total">${fmt(total)}{key === 'semanas_items' ? '/mes' : ''}</span>
+                    <span className="utm-acc-total">${fmt(total)}</span>
                   </button>
                   {isOpen && (
                     <div className="utm-acc-body">
-                      <SeccionItems
-                        title=""
-                        items={items}
-                        onChange={v => setField(key, v)}
+                      <SeccionItems title="" items={items} onChange={v => setField('ingresos', v)}
+                        campos={[
+                          { key: 'nombre', label: 'Nombre', type: 'text' },
+                          { key: 'esFijo', label: 'Fijo', type: 'checkbox', default: false },
+                          { key: 'previsto', label: 'Previsto', type: 'number', default: 0 },
+                        ]}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {toArray(editing?.grupos_gastos || []).map((grupo, gIdx) => {
+              const secKey   = `grupo_${grupo.id || gIdx}`;
+              const isOpen   = seccionAbierta === secKey;
+              const items    = toArray(grupo.items || []);
+              const campos   = camposForFrecuencia();
+              const m        = multFrecuencia(grupo.frecuencia || 'mensual');
+              const total    = items.reduce((s, it) => s + (it.previsto || 0), 0) * m;
+              const frecLabel = FRECUENCIAS_GRUPO.find(f => f.value === grupo.frecuencia)?.label || grupo.frecuencia || '';
+              return (
+                <div key={secKey} className="utm-acc-section">
+                  <button className={`utm-acc-header ${isOpen ? 'open' : ''}`} onClick={() => setSeccionAbierta(isOpen ? null : secKey)}>
+                    <div className="utm-acc-left">
+                      <ChevronRight size={14} className={`utm-acc-chevron ${isOpen ? 'rotated' : ''}`} />
+                      <span className="utm-acc-label">{grupo.icono} {grupo.nombre}</span>
+                      <span className="utm-acc-count">{items.length} items</span>
+                      <span className="dm-grupo-tipo">{frecLabel}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className="utm-acc-total">${fmt(total)}/mes</span>
+                      <button className="dm-del-row" title="Eliminar este grupo"
+                        onClick={e => { e.stopPropagation(); setField('grupos_gastos', toArray(editing.grupos_gastos).filter((_, i) => i !== gIdx)); setDirty(true); }}
+                      ><Trash2 size={11} /></button>
+                    </div>
+                  </button>
+                  {isOpen && (
+                    <div className="utm-acc-body">
+                      <SeccionItems title="" items={items}
+                        onChange={v => setField('grupos_gastos', toArray(editing.grupos_gastos).map((g, i) => i === gIdx ? { ...g, items: v } : g))}
                         campos={campos}
                       />
                     </div>
@@ -620,6 +708,9 @@ function UserTemplatesManager({ dbPath }) {
                 </div>
               );
             })}
+            <div className="utm-acc-section">
+              <NuevoGrupoForm onAdd={grupo => { setField('grupos_gastos', [...toArray(editing?.grupos_gastos || []), grupo]); setDirty(true); }} />
+            </div>
           </div>
         </div>
       ) : (

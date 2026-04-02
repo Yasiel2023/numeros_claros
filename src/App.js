@@ -8,19 +8,18 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import Ingresos from './components/Ingresos';
-import Basicos from './components/Basicos';
-import Impuestos from './components/Impuestos';
+import GrupoGastos from './components/GrupoGastos';
 import Semanas from './components/Semanas';
-import Asceo from './components/Asceo';
+import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
-import { calcularSemanasMes, MESES_ES } from './constants';
-// BASICOS_DEFAULT etc. se cargan desde Firebase (_defaults) — ver cargarPresupuestos
-import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard } from 'lucide-react';
+import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
+import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard, Smile, PiggyBank, Menu } from 'lucide-react';
 import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
 import InvitacionesBanner from './components/InvitacionesBanner';
 import Tarjetas from './components/Tarjetas';
 import NuevoMesModal from './components/NuevoMesModal';
+import OnboardingWizard from './components/OnboardingWizard';
 import './App.css';
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
@@ -35,14 +34,35 @@ function toArray(val) {
 
 function normalizeMesData(raw) {
   if (!raw) return null;
+  // Compatibilidad con datos anteriores (claves planas → nuevo mapa gastos)
+  let gastos;
+  if (raw.gastos) {
+    gastos = Object.fromEntries(
+      Object.keys(raw.gastos).map(k => {
+        const arr = toArray(raw.gastos[k]);
+        // Formato nuevo: array de periodos, cada uno con .items
+        if (arr.length > 0 && arr[0] !== null && typeof arr[0] === 'object' && 'items' in arr[0]) {
+          return [k, arr.map(p => ({ ...p, items: toArray(p.items || []) }))];
+        }
+        // Formato viejo: items planos — GrupoGastos.toPeriodos() los envuelve
+        return [k, arr];
+      })
+    );
+  } else {
+    // Formato muy antiguo (claves planas sin 'gastos')
+    gastos = {
+      basicos:   toArray(raw.basicos   || []),
+      impuestos: toArray(raw.impuestos || []),
+      asceo:     toArray(raw.asceo     || []),
+      ocio:      toArray(raw.ocio      || []),
+    };
+  }
   return {
     ...raw,
-    ingresos:  toArray(raw.ingresos),
-    basicos:   toArray(raw.basicos),
-    impuestos: toArray(raw.impuestos),
-    asceo:     toArray(raw.asceo),
-    semanas:   toArray(raw.semanas).map(s => ({ ...s, items: toArray(s.items) })),
-    tarjetas:  toArray(raw.tarjetas || []),
+    ingresos: toArray(raw.ingresos || []),
+    gastos,
+    semanas:  toArray(raw.semanas  || []).map(s => ({ ...s, items: toArray(s.items || []) })),
+    tarjetas: toArray(raw.tarjetas || []),
   };
 }
 
@@ -50,40 +70,48 @@ function normalizeMesData(raw) {
 // defaults viene de Firebase: presupuestos/{uid}/{presupuestoId}/_defaults
 function initMesData(año, mes, defaults) {
   if (!defaults) return null;
-  const semanasCalc = calcularSemanasMes(año, mes);
-  const semItems = toArray(defaults.semanas_items);
+  const grupos = toArray(defaults.grupos_gastos || []);
+  const gastos = {};
+
+  for (const grupo of grupos) {
+    // Compatibilidad: usar frecuencia si existe, sino inferir del tipo legacy
+    const efectiva = grupo.frecuencia
+      || (grupo.tipo === 'semanas'  ? 'semanal'
+        : grupo.tipo === 'impuesto' ? 'mensual'
+        : 'mensual');
+    const templateItems = toArray(grupo.items || []).map(i => ({
+      nombre: i.nombre, previsto: i.previsto || 0, real: i.previsto || 0, pagado: false,
+    }));
+    const periodos = getPeriodosLabel(efectiva, año, mes);
+    gastos[grupo.id] = periodos.map(p => ({
+      numero: p.numero,
+      label:  p.label,
+      items:  templateItems.map(i => ({ ...i })),
+    }));
+  }
+
   return {
-    ingresos: toArray(defaults.ingresos).map(i => ({ ...i, real: 0 })),
-    basicos:  toArray(defaults.basicos).map(b => ({ ...b, real: b.previsto })),
-    impuestos: toArray(defaults.impuestos).map(i => ({ ...i, real: i.previsto, activo: true })),
-    asceo:    toArray(defaults.asceo).map(a => ({ ...a, real: 0 })),
-    semanas: semanasCalc.map((sem, semIdx) => ({
-      ...sem,
-      items: semItems
-        .filter(it => {
-          const f = it.frecuencia || 'semanal';
-          if (f === 'semanal')   return true;
-          if (f === 'quincenal') return semIdx % 2 === 0; // semanas 1, 3, 5…
-          if (f === 'mensual')   return semIdx === 0;     // solo semana 1
-          return true;
-        })
-        .map(it => ({ ...it, real: 0 })),
-    })),
+    ingresos: toArray(defaults.ingresos || []).map(i => ({ ...i, real: 0 })),
+    gastos,
+    semanas:  [], // legado mantenido para compatibilidad
     tarjetas: [],
     objetivoAhorro: 0,
   };
 }
 
-const NAV = [
-  { key: 'dashboard',    label: 'Dashboard',   icon: LayoutDashboard },
-  { key: 'ingresos',     label: 'Ingresos',     icon: TrendingUp },
-  { key: 'basicos',      label: 'Básicos',      icon: Home },
-  { key: 'impuestos',    label: 'Impuestos',    icon: Receipt },
-  { key: 'semanas',      label: 'Compras',      icon: ShoppingCart },
-  { key: 'asceo',        label: 'Asceo',        icon: Droplets },
-  { key: 'tarjetas',     label: 'Tarjetas',     icon: CreditCard },
-  { key: 'resumen',      label: 'Resumen',      icon: BarChart2 },
-  { key: 'plantillas',   label: 'Plantillas',   icon: Settings },
+// Iconos para el NAV dinámico de grupos
+const GRUPO_ID_ICON        = { basicos: Home, impuestos: Receipt, compras: ShoppingCart, supermercado: ShoppingCart, asceo: Droplets, ocio: Smile };
+const GRUPO_FRECUENCIA_ICON = { mensual: Home, quincenal: Receipt, cada10dias: BarChart2, semanal: ShoppingCart };
+
+const NAV_FIJOS_INICIO = [
+  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, emoji: '📋' },
+  { key: 'ingresos',  label: 'Ingresos',  icon: TrendingUp,      emoji: '💼' },
+];
+const NAV_FIJOS_FIN = [
+  { key: 'tarjetas',   label: 'Tarjetas',        icon: CreditCard, emoji: '💳' },
+  { key: 'resumen',    label: 'Resumen',          icon: BarChart2,  emoji: '📊' },
+  { key: 'caja',       label: 'Caja de Ahorro',  icon: PiggyBank,  emoji: '🐷' },
+  { key: 'plantillas', label: 'Plantillas',       icon: Settings,   emoji: '⚙️' },
 ];
 
 // ── App interna (usuario autenticado) ─────────────────────────
@@ -111,9 +139,34 @@ function AppInterna() {
   const [defaultsTemplates, setDefaultsTemplates] = useState([]); // [{id, nombre, data}]
   // ── Plantillas del usuario (/user_templates/{uid}/) ───────────
   const [userTemplates, setUserTemplates] = useState([]); // [{id, nombre, data}]
+  // ── Estado modal guardar plantilla desde mes ─────────────────
+  const [showGuardarTplModal, setShowGuardarTplModal] = useState(false);
+  const [nombreTplNueva, setNombreTplNueva] = useState('');
+  const [guardandoTpl, setGuardandoTpl] = useState(false);
+  const [tplGuardada, setTplGuardada] = useState(false);
   // ── Estado modal nuevo mes ────────────────────────────────────
   const [nuevoMesPendiente, setNuevoMesPendiente] = useState(false);
   const saveTimer = useRef(null);
+  const [cajaData, setCajaData] = useState(null);
+  // ── Onboarding primer uso ─────────────────────────────────────
+  const [showOnboarding, setShowOnboarding] = useState(false);  // ── Sidebar mobile ─────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const closeSidebar = () => setSidebarOpen(false);
+  // ── Grupos de gastos del presupuesto activo ───────────────────
+  const grupos = toArray(defaults?.grupos_gastos || []);
+
+  // NAV dinámico (Ingresos fijos + un ítem por cada grupo + secciones finales)
+  const NAV = [
+    ...NAV_FIJOS_INICIO,
+    ...grupos.map(g => ({
+      key:     `grupo_${g.id}`,
+      label:   g.nombre,
+      icon:    GRUPO_ID_ICON[g.id] || GRUPO_FRECUENCIA_ICON[g.frecuencia || (g.tipo === 'semanas' ? 'semanal' : 'mensual')] || Home,
+      emoji:   g.icono || null,
+      grupoId: g.id,
+    })),
+    ...NAV_FIJOS_FIN,
+  ];
 
   // Clave del mes en RTDB: "2026_2" (año_mesIndex0basado)
   const mesKey = `${año}_${mes}`;
@@ -121,6 +174,43 @@ function AppInterna() {
   // ownerUid del presupuesto activo (puede ser otro usuario en presupuestos compartidos)
   const ownerUidActual = presupuestos.find(p => p.id === presupuestoActual)?.ownerUid || user.uid;
   const rolActual = presupuestos.find(p => p.id === presupuestoActual)?.rol || 'owner';
+
+  // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
+  useEffect(() => {
+    if (!presupuestoActual || !ownerUidActual) return;
+    const cargarCaja = async () => {
+      try {
+        const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_caja_ahorro`));
+        if (snap.exists()) {
+          const raw = snap.val();
+          const movs = raw.movimientos
+            ? (Array.isArray(raw.movimientos)
+                ? raw.movimientos
+                : Object.keys(raw.movimientos).sort().map(k => raw.movimientos[k]))
+            : [];
+          setCajaData({ ...raw, movimientos: movs });
+        } else {
+          setCajaData({ movimientos: [] });
+        }
+      } catch (e) {
+        console.error('Error cargando caja:', e);
+        setCajaData({ movimientos: [] });
+      }
+    };
+    cargarCaja();
+  }, [presupuestoActual, ownerUidActual]); // eslint-disable-line
+
+  const guardarCaja = useCallback(async (data) => {
+    if (!presupuestoActual) return;
+    try {
+      await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_caja_ahorro`), data);
+    } catch (e) { console.error('Error guardando caja:', e); }
+  }, [presupuestoActual, ownerUidActual]);
+
+  const updateCajaData = useCallback((data) => {
+    setCajaData(data);
+    guardarCaja(data);
+  }, [guardarCaja]);
 
   // ── Cargar plantillas globales /defaults ─────────────────────
   useEffect(() => {
@@ -165,22 +255,33 @@ function AppInterna() {
     cargarUserTemplates();
   }, [user]);
 
-  // ── Seed de defaults locales para primera inicialización ──────
-  // Solo se usa si Firebase no tiene _defaults todavía
-  const buildSeedDefaults = () => {
-    // Importamos dinámicamente solo para sembrar la primera vez
-    const { BASICOS_DEFAULT, IMPUESTOS_DEFAULT, ASCEO_DEFAULT,
-            COMPRAS_SEMANA_DEFAULT, INGRESOS_FIJOS } = require('./constants');
-    return {
-      ingresos: [
-        ...INGRESOS_FIJOS.map(i => ({ ...i, previsto: 0 })),
-        { nombre: 'Melia', esFijo: false, previsto: 0 },
-      ],
-      basicos:      BASICOS_DEFAULT,
-      impuestos:    IMPUESTOS_DEFAULT,
-      asceo:        ASCEO_DEFAULT,
-      semanas_items: COMPRAS_SEMANA_DEFAULT,
+  // ── Seed de defaults vacio para presupuestos nuevos ──────────
+  const buildSeedDefaults = () => ({ grupos_gastos: [], ingresos: [] });
+
+  // ── Crear presupuesto desde el wizard de onboarding ─────────
+  const handleOnboardingCreate = async ({ nombre, grupos }) => {
+    const slug = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
+    const id   = `${slug}_${Date.now().toString(36)}`;
+    const meta = { nombre, creadoEn: new Date().toISOString() };
+    const seed = {
+      grupos_gastos: grupos,
+      ingresos: [],
     };
+    await set(ref(db, `presupuestos/${user.uid}/${id}/_meta`), meta);
+    await set(ref(db, `presupuestos/${user.uid}/${id}/_defaults`), seed);
+    await set(ref(db, `accesos/${user.uid}/${id}`), {
+      ownerUid: user.uid, nombre, rol: 'owner', creadoEn: new Date().toISOString(),
+    });
+    // Guardar como Default General para futuros usuarios nuevos
+    await set(ref(db, 'defaults/general'), {
+      _meta: { nombre: 'General', creadoEn: new Date().toISOString() },
+      grupos_gastos: grupos,
+      ingresos: [],
+    });
+    const nuevo = { id, nombre, ownerUid: user.uid, rol: 'owner' };
+    setPresupuestos([nuevo]);
+    setPresupuestoActual(id);
+    setShowOnboarding(false);
   };
 
   // ── Crear nuevo presupuesto ─────────────────────────────────────
@@ -237,13 +338,8 @@ function AppInterna() {
               ownerUid: user.uid,
               rol: 'owner',
             }));
-        } else {
-          // No hay presupuestos propios → crear uno por defecto
-          const defaultMeta = { nombre: 'Mi Presupuesto', creadoEn: new Date().toISOString() };
-          await set(ref(db, `presupuestos/${user.uid}/principal/_meta`), defaultMeta);
-          await set(ref(db, `accesos/${user.uid}/principal`), { ownerUid: user.uid, nombre: 'Mi Presupuesto', rol: 'owner', creadoEn: new Date().toISOString() });
-          listaPropios = [{ id: 'principal', nombre: 'Mi Presupuesto', ownerUid: user.uid, rol: 'owner' }];
         }
+        // (Si no hay propios, no auto-creamos — el wizard de onboarding lo hará)
 
         // Migrar presupuestos propios que aún no tienen entrada en /accesos
         for (const p of listaPropios) {
@@ -264,6 +360,14 @@ function AppInterna() {
         }
 
         const lista = [...listaPropios, ...listaCompartidos];
+
+        // Primer uso: sin presupuestos propios ni compartidos → mostrar onboarding
+        if (lista.length === 0) {
+          setShowOnboarding(true);
+          setLoadingPresup(false);
+          return;
+        }
+
         setPresupuestos(lista);
         setPresupuestoActual(lista[0]?.id || null);
 
@@ -368,6 +472,37 @@ function AppInterna() {
     updateMesData(data);
   }, [año, mes, defaults, userTemplates, updateMesData]); // eslint-disable-line
 
+  // ── Guardar mes actual como plantilla de usuario ─────────────
+  const guardarMesComoPlantilla = useCallback(async () => {
+    if (!mesData || !user || !nombreTplNueva.trim()) return;
+    setGuardandoTpl(true);
+    try {
+      const slug = nombreTplNueva.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
+      const tplId = `${slug}_${Date.now().toString(36)}`;
+      const tplData = {
+        _meta: { nombre: nombreTplNueva.trim(), creadoEn: new Date().toISOString() },
+        grupos_gastos: grupos.map(g => ({
+          ...g,
+          items: ((mesData.gastos[g.id] || [])[0]?.items || g.items || [])
+            .map(i => ({ nombre: i.nombre, previsto: i.previsto || 0 })),
+        })),
+        ingresos: (mesData.ingresos || []).map(i => ({ nombre: i.nombre, previsto: i.previsto || 0 })),
+        objetivoAhorro: mesData.objetivoAhorro || 0,
+      };
+      await set(ref(db, `user_templates/${user.uid}/${tplId}`), tplData);
+      setUserTemplates(prev => [...prev, { id: tplId, nombre: nombreTplNueva.trim(), data: tplData }]);
+      setTplGuardada(true);
+      setTimeout(() => {
+        setTplGuardada(false);
+        setShowGuardarTplModal(false);
+        setNombreTplNueva('');
+      }, 1500);
+    } catch (e) {
+      console.error('Error guardando plantilla:', e);
+    }
+    setGuardandoTpl(false);
+  }, [mesData, user, grupos, nombreTplNueva]); // eslint-disable-line
+
   // ── Navegar meses ─────────────────────────────────────────────
   const mesAnterior = () => {
     if (mes === 0) { setMes(11); setAño(a => a - 1); }
@@ -383,8 +518,17 @@ function AppInterna() {
 
   // ── Pendientes para badge ─────────────────────────────────────
   const pendTotal = mesData
-    ? (mesData.basicos || []).filter(b => (b.real || 0) > 0).length
-    + (mesData.impuestos || []).filter(i => i.activo && (i.real || 0) > 0).length
+    ? Object.entries(mesData.gastos || {}).reduce((total, [, grupoData]) => {
+        const arr = Array.isArray(grupoData) ? grupoData : [];
+        if (arr.length === 0) return total;
+        // Formato nuevo: periodos con items
+        if (arr[0] !== null && typeof arr[0] === 'object' && 'items' in arr[0]) {
+          return total + arr.reduce((s, p) =>
+            s + (p.items || []).filter(i => i.pagado !== true && (i.previsto || 0) > 0).length, 0);
+        }
+        // Formato viejo: items planos
+        return total + arr.filter(i => i.pagado !== true && (i.previsto || 0) > 0).length;
+      }, 0)
     : 0;
 
   // ── Pantalla de carga inicial de presupuestos ─────────────────
@@ -397,13 +541,21 @@ function AppInterna() {
     );
   }
 
+  // ── Onboarding: primer uso ──────────────────────────────────────
+  if (showOnboarding) {
+    return <OnboardingWizard onCreate={handleOnboardingCreate} />;
+  }
+
   return (
     <div className="layout">
+      {/* OVERLAY MOBILE */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={closeSidebar} />}
+
       {/* SIDEBAR */}
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
         <div className="sidebar-brand">
           <span className="sb-icon">🏠</span>
-          <span className="sb-name">CasaFinanzas</span>
+          <span className="sb-name">Números Claros</span>
         </div>
 
         {/* Selector de presupuesto */}
@@ -528,10 +680,12 @@ function AppInterna() {
         </div>
 
         <nav className="sidebar-nav">
-          {NAV.map(({ key, label, icon: Icon }) => (
+          {NAV.map(({ key, label, icon: Icon, emoji }) => (
             <button key={key} className={`nav-item ${vista === key ? 'active' : ''}`}
-              onClick={() => setVista(key)}>
-              <Icon size={16}/>
+              onClick={() => { setVista(key); closeSidebar(); }}>
+              {emoji
+                ? <span className="nav-emoji">{emoji}</span>
+                : <Icon size={16}/>}
               <span>{label}</span>
               {key === 'dashboard' && pendTotal > 0 && (
                 <span className="nav-badge">{pendTotal}</span>
@@ -556,9 +710,14 @@ function AppInterna() {
         {/* Topbar */}
         <header className="topbar">
           <div className="topbar-left">
+            <button className="topbar-menu-btn" onClick={() => setSidebarOpen(o => !o)} aria-label="Menú">
+              <Menu size={20}/>
+            </button>
             <h2 className="topbar-title">
               {vista === 'plantillas'
                 ? 'Plantillas de datos'
+                : vista === 'caja'
+                ? 'Caja de Ahorro'
                 : `${NAV.find(n => n.key === vista)?.label} — ${MESES_ES[mes]} ${año}`
               }
             </h2>
@@ -568,6 +727,41 @@ function AppInterna() {
             {saved && !saving && <span className="save-status saved"><Save size={14}/> Guardado</span>}
           </div>
         </header>
+
+        {/* Modal guardar mes como plantilla */}
+        {showGuardarTplModal && (
+          <div className="presup-modal-overlay" onClick={() => setShowGuardarTplModal(false)}>
+            <div className="presup-modal" onClick={e => e.stopPropagation()}>
+              <div className="presup-modal-header">
+                <span>💾 Guardar mes como plantilla</span>
+                <button className="presup-modal-close" onClick={() => setShowGuardarTplModal(false)}><X size={14} /></button>
+              </div>
+              <p className="gtpl-desc">
+                Se guardarán los valores <strong>previstos</strong> de {MESES_ES[mes]} {año}.<br/>
+                Los valores reales no se copian.
+              </p>
+              <input
+                className="presup-modal-input"
+                type="text"
+                placeholder="Ej: Mes típico, Verano 2026..."
+                value={nombreTplNueva}
+                onChange={e => setNombreTplNueva(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && guardarMesComoPlantilla()}
+                autoFocus
+              />
+              <div className="presup-modal-actions">
+                <button className="presup-modal-cancel" onClick={() => setShowGuardarTplModal(false)}>Cancelar</button>
+                <button
+                  className="presup-modal-ok"
+                  onClick={guardarMesComoPlantilla}
+                  disabled={!nombreTplNueva.trim() || guardandoTpl || tplGuardada}
+                >
+                  {guardandoTpl ? <Loader size={13} className="spin" /> : tplGuardada ? '✓ Guardada' : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Modal nuevo mes */}
         {nuevoMesPendiente && (
@@ -583,12 +777,30 @@ function AppInterna() {
         <main className="main-content">
           {vista === 'plantillas' ? (
             <DefaultsManager />
+          ) : vista === 'caja' ? (
+            <div className="page">
+              <div className="page-header"><h1 className="page-title">🐷 Caja de Ahorro</h1></div>
+              <CajaAhorro
+                cajaData={cajaData}
+                onChange={updateCajaData}
+                ahorroRealMes={mesData?.objetivoAhorro || 0}
+                mesLabel={`${MESES_ES[mes]} ${año}`}
+              />
+            </div>
           ) : loading || nuevoMesPendiente ? (
             <div className="loading-state"><Loader size={28} className="spin"/> Cargando {MESES_ES[mes]}...</div>
           ) : (
             <>
               {vista === 'dashboard' && (
-                <Dashboard mesData={mesData} mes={mes} año={año} onIrA={setVista} />
+                <Dashboard
+                  mesData={mesData} mes={mes} año={año} grupos={grupos}
+                  onIrA={key =>
+                    // Compatibilidad con claves legacy
+                    setVista(['basicos','impuestos','asceo','ocio','semanas'].includes(key)
+                      ? `grupo_${key}`
+                      : key)
+                  }
+                />
               )}
               {vista === 'ingresos' && (
                 <div className="page">
@@ -599,46 +811,34 @@ function AppInterna() {
                   />
                 </div>
               )}
-              {vista === 'basicos' && (
-                <div className="page">
-                  <div className="page-header"><h1 className="page-title">🏠 Gastos Básicos — {MESES_ES[mes]} {año}</h1></div>
-                  <Basicos
-                    data={mesData?.basicos}
-                    onChange={bas => updateMesData({ ...mesData, basicos: bas })}
-                  />
-                </div>
-              )}
-              {vista === 'impuestos' && (
-                <div className="page">
-                  <div className="page-header"><h1 className="page-title">🧾 Impuestos — {MESES_ES[mes]} {año}</h1></div>
-                  <Impuestos
-                    data={mesData?.impuestos}
-                    onChange={imp => updateMesData({ ...mesData, impuestos: imp })}
-                  />
-                </div>
-              )}
-              {vista === 'semanas' && (
-                <div className="page">
-                  <div className="page-header"><h1 className="page-title">🛒 Compras Semanales — {MESES_ES[mes]} {año}</h1></div>
-                  <Semanas
-                    data={mesData?.semanas}
-                    semanasCalc={calcularSemanasMes(año, mes)}
-                    onChange={sem => updateMesData({ ...mesData, semanas: sem })}
-                  />
-                </div>
-              )}
-              {vista === 'asceo' && (
-                <div className="page">
-                  <div className="page-header"><h1 className="page-title">🧴 Asceo Mensual — {MESES_ES[mes]} {año}</h1></div>
-                  <Asceo
-                    data={mesData?.asceo}
-                    onChange={asc => updateMesData({ ...mesData, asceo: asc })}
-                  />
-                </div>
-              )}
+
+              {/* ── Grupos de gastos dinamicos (todos via GrupoGastos con periodos) ── */}
+              {vista.startsWith('grupo_') && (() => {
+                const grupoId = vista.replace('grupo_', '');
+                const grupo   = grupos.find(g => g.id === grupoId);
+                if (!grupo) return null;
+                return (
+                  <div className="page">
+                    <div className="page-header">
+                      <h1 className="page-title">{grupo.icono} {grupo.nombre} — {MESES_ES[mes]} {año}</h1>
+                    </div>
+                    <GrupoGastos
+                      grupo={grupo}
+                      data={mesData?.gastos?.[grupoId]}
+                      onChange={periodos =>
+                        updateMesData({
+                          ...mesData,
+                          gastos: { ...(mesData?.gastos || {}), [grupoId]: periodos },
+                        })
+                      }
+                    />
+                  </div>
+                );
+              })()}
+
               {vista === 'tarjetas' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">💳 Tarjetas de Crédito — {MESES_ES[mes]} {año}</h1></div>
+                  <div className="page-header"><h1 className="page-title">💳 Tarjetas — {MESES_ES[mes]} {año}</h1></div>
                   <Tarjetas
                     data={mesData?.tarjetas}
                     onChange={tarj => updateMesData({ ...mesData, tarjetas: tarj })}
@@ -647,8 +847,19 @@ function AppInterna() {
               )}
               {vista === 'resumen' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">📊 Resumen — {MESES_ES[mes]} {año}</h1></div>
-                  <Resumen mesData={mesData} onChange={updateMesData} />
+                  <div className="page-header">
+                    <h1 className="page-title">📊 Resumen — {MESES_ES[mes]} {año}</h1>
+                    {mesData && (
+                      <button
+                        className="btn-save-tpl"
+                        onClick={() => { setNombreTplNueva(`${MESES_ES[mes]} ${año}`); setShowGuardarTplModal(true); }}
+                        title="Guardar valores presupuestados de este mes como plantilla"
+                      >
+                        💾 Guardar como plantilla
+                      </button>
+                    )}
+                  </div>
+                  <Resumen mesData={mesData} onChange={updateMesData} grupos={grupos} />
                 </div>
               )}
             </>

@@ -4,13 +4,14 @@ import { getDatabase } from 'firebase/database';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
- apiKey: "AIzaSyDk_p-F7lKMFYzH4Nv51SZPpvcET76Daq4",
-  authDomain: "numerosclaros-4bd68.firebaseapp.com",
-  databaseURL: "https://numerosclaros-4bd68-default-rtdb.firebaseio.com",
-  projectId: "numerosclaros-4bd68",
-  storageBucket: "numerosclaros-4bd68.firebasestorage.app",
-  messagingSenderId: "856646095933",
-  appId: "1:856646095933:web:7623cf66e52c903c174654"
+  apiKey: "AIzaSyC-upFjBq7FqxUfP1HKuBvmrnQznjOklZI",
+  authDomain: "numeros-claros.firebaseapp.com",
+  databaseURL: "https://numeros-claros-default-rtdb.firebaseio.com",
+  projectId: "numeros-claros",
+  storageBucket: "numeros-claros.firebasestorage.app",
+  messagingSenderId: "796978157718",
+  appId: "1:796978157718:web:bbea4f233606cc26c84ab7",
+  measurementId: "G-V40X00MTMS"
 };
 
 const app = initializeApp(firebaseConfig);
