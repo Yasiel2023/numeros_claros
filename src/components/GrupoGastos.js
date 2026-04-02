@@ -13,6 +13,37 @@ const fmt = (n) =>
     useGrouping: false,
   }).format(n || 0);
 
+// Función para determinar si un período semanal es el actual
+const esPeriodoActual = (periodo, frecuencia, anio, mes) => {
+  // Solo aplicar para gastos semanales
+  if (frecuencia !== 'semanal') {
+    return true; // Para no semanales, mantener comportamiento original (todos abiertos)
+  }
+  
+  const hoy = new Date();
+  const diaHoy = hoy.getDate();
+  const mesHoy = hoy.getMonth();
+  const anioHoy = hoy.getFullYear();
+  
+  // Solo verificar si estamos en el mismo año y mes
+  if (anioHoy !== anio || mesHoy !== mes) {
+    return false;
+  }
+  
+  // Extraer el día de la semana del label (formato: "Semana X (DD/MM)")
+  const match = periodo.label.match(/\((\d{1,2})\/\d{1,2}\)/);
+  if (!match) return false;
+  
+  const diaSemana = parseInt(match[1], 10);
+  if (!diaSemana) return false;
+  
+  // Calcular el rango de la semana (aproximadamente 7 días desde el día de compra)
+  const inicioSemana = Math.max(1, diaSemana - 3);
+  const finSemana = Math.min(new Date(anio, mes + 1, 0).getDate(), diaSemana + 3);
+  
+  return diaHoy >= inicioSemana && diaHoy <= finSemana;
+};
+
 // --- Detecta si el array es de periodos (nuevo) o de items directos (viejo) ---
 function isPeriodoArray(arr) {
   return (
@@ -83,8 +114,8 @@ function ItemRow({ item, onChange, onDelete }) {
 }
 
 // --- Seccion de un periodo con su propia tabla e inputs ---
-function PeriodoSection({ periodo, showHeader, onChange }) {
-  const [open, setOpen]       = useState(true);
+function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true }) {
+  const [open, setOpen]       = useState(isCurrentPeriod);
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
   const [newPrev, setNewPrev]     = useState('');
@@ -223,7 +254,7 @@ function PeriodoSection({ periodo, showHeader, onChange }) {
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes }) {
   const periodos    = toPeriodos(data || []);
   const showHeaders = periodos.length > 1;
 
@@ -278,14 +309,18 @@ export default function GrupoGastos({ grupo, data, onChange }) {
       </div>
 
       {/* Periodos */}
-      {periodos.map((periodo, idx) => (
-        <PeriodoSection
-          key={idx}
-          periodo={periodo}
-          showHeader={showHeaders}
-          onChange={updated => updatePeriodo(idx, updated)}
-        />
-      ))}
+      {periodos.map((periodo, idx) => {
+        const isCurrentPeriod = esPeriodoActual(periodo, grupo?.frecuencia, anio, mes);
+        return (
+          <PeriodoSection
+            key={idx}
+            periodo={periodo}
+            showHeader={showHeaders}
+            onChange={updated => updatePeriodo(idx, updated)}
+            isCurrentPeriod={isCurrentPeriod}
+          />
+        );
+      })}
     </div>
   );
 }

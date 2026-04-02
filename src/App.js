@@ -831,6 +831,8 @@ function AppInterna() {
                           gastos: { ...(mesData?.gastos || {}), [grupoId]: periodos },
                         })
                       }
+                      anio={año}
+                      mes={mes}
                     />
                   </div>
                 );

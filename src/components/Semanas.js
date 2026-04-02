@@ -7,6 +7,29 @@ const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, ma
 const FREQ_LABEL = { semanal: 'sem', quincenal: 'quin', mensual: 'mens' };
 const FREQ_CLASS = { semanal: 'freq-semanal', quincenal: 'freq-quincenal', mensual: 'freq-mensual' };
 
+// Función para determinar si una semana es la actual
+const esSemanaActual = (semana, anio, mes) => {
+  const hoy = new Date();
+  const diaHoy = hoy.getDate();
+  const mesHoy = hoy.getMonth();
+  const anioHoy = hoy.getFullYear();
+  
+  // Solo verificar si estamos en el mismo año y mes
+  if (anioHoy !== anio || mesHoy !== mes) {
+    return false;
+  }
+  
+  // Obtener el día de la semana (del objeto semana)
+  const diaSemana = semana.dia;
+  if (!diaSemana) return false;
+  
+  // Calcular el rango de la semana (aproximadamente 7 días desde el día de compra)
+  const inicioSemana = Math.max(1, diaSemana - 3);
+  const finSemana = Math.min(new Date(anio, mes + 1, 0).getDate(), diaSemana + 3);
+  
+  return diaHoy >= inicioSemana && diaHoy <= finSemana;
+};
+
 function ItemRow({ item, onChange, onDelete }) {
   const freq = item.frecuencia || 'semanal';
   return (
@@ -32,8 +55,10 @@ function ItemRow({ item, onChange, onDelete }) {
   );
 }
 
-function SemanaBlock({ semana, idx, onChangeSemana, onDelete }) {
-  const [open, setOpen] = useState(true);
+function SemanaBlock({ semana, idx, onChangeSemana, onDelete, anio, mes }) {
+  // Determinar si esta semana es la actual para el estado inicial del acordeón
+  const esActual = esSemanaActual(semana, anio, mes);
+  const [open, setOpen] = useState(esActual);
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
   const [newPrev, setNewPrev] = useState('');
@@ -116,9 +141,10 @@ function SemanaBlock({ semana, idx, onChangeSemana, onDelete }) {
   );
 }
 
-export default function Semanas({ data, onChange, semanasCalc }) {
+export default function Semanas({ data, onChange, semanasCalc, anio, mes }) {
   // data: array de semanas [ { label, dia, items: [...] } ]
   // semanasCalc: semanas calculadas del mes (para referencia de labels/días)
+  // anio, mes: año y mes actual para determinar la semana actual
 
   const semanas = data || [];
 
@@ -157,7 +183,9 @@ export default function Semanas({ data, onChange, semanasCalc }) {
         ) : semanas.map((sem, i) => (
           <SemanaBlock key={i} semana={sem} idx={i}
             onChangeSemana={upd => updateSemana(i, upd)}
-            onDelete={() => deleteSemana(i)} />
+            onDelete={() => deleteSemana(i)}
+            anio={anio}
+            mes={mes} />
         ))}
       </div>
     </div>
