@@ -6,6 +6,8 @@ import { ref, set, get } from 'firebase/database';
 
 export default function Config({ uid, admins = {} }) {
   const [apiKey, setLocalApiKey] = useState('');
+  const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
+  const [groqModel, setGroqModel] = useState('llama-3.1-70b-versatile');
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -13,19 +15,27 @@ export default function Config({ uid, admins = {} }) {
   const isAdmin = admins[uid] === true;
 
   useEffect(() => {
-    const cargarApiKey = async () => {
+    const cargarConfig = async () => {
       try {
-        const snap = await get(ref(db, `config/${uid}/groq_api_key`));
-        if (snap.exists()) {
-          setLocalApiKey(snap.val());
+        const snapKey = await get(ref(db, `config/${uid}/groq_api_key`));
+        if (snapKey.exists()) {
+          setLocalApiKey(snapKey.val());
+        }
+        const snapUrl = await get(ref(db, `config/${uid}/groq_url`));
+        if (snapUrl.exists()) {
+          setGroqUrl(snapUrl.val());
+        }
+        const snapModel = await get(ref(db, `config/${uid}/groq_model`));
+        if (snapModel.exists()) {
+          setGroqModel(snapModel.val());
         }
       } catch (e) {
-        console.error('Error cargando API key:', e);
+        console.error('Error cargando configuración:', e);
       } finally {
         setLoading(false);
       }
     };
-    cargarApiKey();
+    cargarConfig();
   }, [uid]);
 
   const guardar = async () => {
@@ -48,8 +58,10 @@ export default function Config({ uid, admins = {} }) {
     }
 
     try {
-      // Guardar en Firebase en config/{uid}/groq_api_key
+      // Guardar en Firebase
       await set(ref(db, `config/${uid}/groq_api_key`), apiKey);
+      await set(ref(db, `config/${uid}/groq_url`), groqUrl);
+      await set(ref(db, `config/${uid}/groq_model`), groqModel);
 
       // Registrarse como admin en Firebase (si no lo eres ya)
       if (!isAdmin) {
@@ -131,6 +143,30 @@ export default function Config({ uid, admins = {} }) {
                 Groq Console
               </a>
             </p>
+          </div>
+
+          <div className="config-field">
+            <label>URL de Groq</label>
+            <input
+              type="text"
+              className="config-input"
+              value={groqUrl}
+              placeholder="https://api.groq.com/openai/v1"
+              onChange={(e) => { setGroqUrl(e.target.value); setError(''); }}
+            />
+            <p className="config-hint">Endpoint de la API (por defecto: https://api.groq.com/openai/v1)</p>
+          </div>
+
+          <div className="config-field">
+            <label>Modelo de Groq</label>
+            <input
+              type="text"
+              className="config-input"
+              value={groqModel}
+              placeholder="llama-3.1-70b-versatile"
+              onChange={(e) => { setGroqModel(e.target.value); setError(''); }}
+            />
+            <p className="config-hint">Modelos disponibles: llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768</p>
           </div>
 
           <div className="config-actions">

@@ -172,6 +172,8 @@ function AppInterna() {
   const [admins, setAdmins] = useState({});
   // ── API Key de Gemini ─────────────────────────────────
   const [groqApiKey, setGroqApiKey] = useState('');
+  const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
+  const [groqModel, setGroqModel] = useState('llama-3.1-70b-versatile');
   // ── Flujo de foto + desglose ──────────────────────────
   const [showFotoModal, setShowFotoModal] = useState(false);
   const [desglosing, setDesglosing] = useState(false);
@@ -213,18 +215,22 @@ function AppInterna() {
     cargarAdmins();
   }, []);
 
-  // ── Cargar API key de Groq ──────────────────────────
+  // ── Cargar configuración de Groq ──────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
-    const cargarGroqKey = async () => {
+    const cargarGroqConfig = async () => {
       try {
-        const snap = await get(ref(db, `config/${user.uid}/groq_api_key`));
-        setGroqApiKey(snap.exists() ? snap.val() : '');
+        const snapKey = await get(ref(db, `config/${user.uid}/groq_api_key`));
+        setGroqApiKey(snapKey.exists() ? snapKey.val() : '');
+        const snapUrl = await get(ref(db, `config/${user.uid}/groq_url`));
+        if (snapUrl.exists()) setGroqUrl(snapUrl.val());
+        const snapModel = await get(ref(db, `config/${user.uid}/groq_model`));
+        if (snapModel.exists()) setGroqModel(snapModel.val());
       } catch (e) {
-        console.error('Error cargando Groq API key:', e);
+        console.error('Error cargando configuración de Groq:', e);
       }
     };
-    cargarGroqKey();
+    cargarGroqConfig();
   }, [user?.uid]);
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
@@ -972,6 +978,8 @@ function AppInterna() {
                   <div className="section-block">
                     <Chat
                       apiKey={groqApiKey}
+                      groqUrl={groqUrl}
+                      groqModel={groqModel}
                       presupuestos={presupuestos}
                       mesDataByMonth={{ [`${año}_${mes}`]: mesData }}
                       defaults={defaults}

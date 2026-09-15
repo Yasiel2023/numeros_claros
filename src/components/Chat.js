@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader, AlertCircle } from 'lucide-react';
 
-export default function Chat({ apiKey, presupuestos, mesDataByMonth, defaults, año, mes }) {
+export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesDataByMonth, defaults, año, mes }) {
   const [presupuestoSelec, setPresupuestoSelec] = useState(presupuestos?.[0]?.id || '');
   const [pregunta, setPregunta] = useState('');
   const [conversacion, setConversacion] = useState([]);
@@ -54,7 +54,7 @@ export default function Chat({ apiKey, presupuestos, mesDataByMonth, defaults, a
 
       // Hacer request a Groq (API compatible con OpenAI)
       const response = await fetch(
-        'https://api.groq.com/openai/v1/chat/completions',
+        `${groqUrl}/chat/completions`,
         {
           method: 'POST',
           headers: {
@@ -62,7 +62,7 @@ export default function Chat({ apiKey, presupuestos, mesDataByMonth, defaults, a
             'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: 'llama-3.1-70b-versatile',
+            model: groqModel,
             messages: [
               {
                 role: 'system',
