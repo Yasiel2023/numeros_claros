@@ -15,7 +15,7 @@ export default function Config({ uid, admins = {} }) {
   useEffect(() => {
     const cargarApiKey = async () => {
       try {
-        const snap = await get(ref(db, `config/${uid}/gemini_api_key`));
+        const snap = await get(ref(db, `config/${uid}/groq_api_key`));
         if (snap.exists()) {
           setLocalApiKey(snap.val());
         }
@@ -32,7 +32,7 @@ export default function Config({ uid, admins = {} }) {
     setError('');
     if (!apiKey.trim()) {
       try {
-        await set(ref(db, `config/${uid}/gemini_api_key`), null);
+        await set(ref(db, `config/${uid}/groq_api_key`), null);
         setLocalApiKey('');
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
@@ -42,14 +42,14 @@ export default function Config({ uid, admins = {} }) {
       return;
     }
 
-    if (!apiKey.startsWith('AIza') && !apiKey.startsWith('AQ.')) {
-      setError('Parece no ser una API key de Google válida (deben empezar con AIza o AQ.)');
+    if (!apiKey.startsWith('gsk_')) {
+      setError('Parece no ser una API key de Groq válida (deben empezar con gsk_)');
       return;
     }
 
     try {
-      // Guardar en Firebase en config/{uid}/gemini_api_key
-      await set(ref(db, `config/${uid}/gemini_api_key`), apiKey);
+      // Guardar en Firebase en config/{uid}/groq_api_key
+      await set(ref(db, `config/${uid}/groq_api_key`), apiKey);
 
       // Registrarse como admin en Firebase (si no lo eres ya)
       if (!isAdmin) {
@@ -66,7 +66,7 @@ export default function Config({ uid, admins = {} }) {
   const eliminar = async () => {
     setError('');
     try {
-      await set(ref(db, `config/${uid}/gemini_api_key`), null);
+      await set(ref(db, `config/${uid}/groq_api_key`), null);
       setLocalApiKey('');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -95,9 +95,9 @@ export default function Config({ uid, admins = {} }) {
       </div>
 
       <div className="section-block">
-        <h2 className="section-title">🤖 Google Gemini Vision API</h2>
+        <h2 className="section-title">🤖 Groq API</h2>
         <p className="section-desc">
-          Para analizar fotos de comprobantes y desglosar automáticamente las compras.
+          Para hacer preguntas rápidas sobre tu presupuesto. También usamos Gemini Vision para analizar fotos de comprobantes.
         </p>
 
         {error && (
@@ -108,13 +108,13 @@ export default function Config({ uid, admins = {} }) {
 
         <div className="config-form">
           <div className="config-field">
-            <label>API Key de Gemini</label>
+            <label>API Key de Groq</label>
             <div className="config-input-group">
               <input
                 type={showKey ? 'text' : 'password'}
                 className="config-input"
                 value={apiKey}
-                placeholder="AIza..."
+                placeholder="gsk_..."
                 onChange={(e) => { setLocalApiKey(e.target.value); setError(''); }}
               />
               <button
@@ -127,8 +127,8 @@ export default function Config({ uid, admins = {} }) {
             </div>
             <p className="config-hint">
               Obtén una key gratis en{' '}
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
-                Google AI Studio
+              <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer">
+                Groq Console
               </a>
             </p>
           </div>
@@ -153,7 +153,7 @@ export default function Config({ uid, admins = {} }) {
 
         {apiKey && (
           <div className="alert alert-info">
-            ✓ Gemini está configurado. Podrás analizar comprobantes en la pantalla principal.
+            ✓ Groq está configurado. Podrás hacer preguntas sobre tu presupuesto en el chat.
           </div>
         )}
 
@@ -169,7 +169,7 @@ export default function Config({ uid, admins = {} }) {
       <div className="section-block">
         <h2 className="section-title">📝 Sobre esta pantalla</h2>
         <p className="section-desc">
-          La API key se guarda en Firebase en <code>config/{'{uid}'}/gemini_api_key</code>.
+          La API key se guarda en Firebase en <code>config/{'{uid}'}/groq_api_key</code>.
           <br />
           <strong>⚠️ Importante:</strong> Con las reglas de Firebase actuales (abiertas), cualquiera que conozca tu URL
           de base puede leerla. Después de guardar, vamos a bajar las reglas para proteger esta sección.

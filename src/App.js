@@ -171,7 +171,7 @@ function AppInterna() {
   // ── Admins ────────────────────────────────────────────
   const [admins, setAdmins] = useState({});
   // ── API Key de Gemini ─────────────────────────────────
-  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [groqApiKey, setGroqApiKey] = useState('');
   // ── Flujo de foto + desglose ──────────────────────────
   const [showFotoModal, setShowFotoModal] = useState(false);
   const [desglosing, setDesglosing] = useState(false);
@@ -213,18 +213,18 @@ function AppInterna() {
     cargarAdmins();
   }, []);
 
-  // ── Cargar API key de Gemini ──────────────────────────
+  // ── Cargar API key de Groq ──────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
-    const cargarGeminiKey = async () => {
+    const cargarGroqKey = async () => {
       try {
-        const snap = await get(ref(db, `config/${user.uid}/gemini_api_key`));
-        setGeminiApiKey(snap.exists() ? snap.val() : '');
+        const snap = await get(ref(db, `config/${user.uid}/groq_api_key`));
+        setGroqApiKey(snap.exists() ? snap.val() : '');
       } catch (e) {
-        console.error('Error cargando Gemini API key:', e);
+        console.error('Error cargando Groq API key:', e);
       }
     };
-    cargarGeminiKey();
+    cargarGroqKey();
   }, [user?.uid]);
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
@@ -925,7 +925,7 @@ function AppInterna() {
                       }
                       anio={año}
                       mes={mes}
-                      apiKey={geminiApiKey}
+                      apiKey={groqApiKey}
                       mesData={mesData}
                       grupos={grupos}
                     />
@@ -971,7 +971,7 @@ function AppInterna() {
                   <div className="page-header"><h1 className="page-title">💬 Preguntas sobre tu presupuesto</h1></div>
                   <div className="section-block">
                     <Chat
-                      apiKey={geminiApiKey}
+                      apiKey={groqApiKey}
                       presupuestos={presupuestos}
                       mesDataByMonth={{ [`${año}_${mes}`]: mesData }}
                       defaults={defaults}

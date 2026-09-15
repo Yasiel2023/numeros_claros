@@ -52,45 +52,44 @@ export default function Chat({ apiKey, presupuestos, mesDataByMonth, defaults, a
         };
       });
 
-      // Hacer request a Gemini
+      // Hacer request a Groq (API compatible con OpenAI)
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+        'https://api.groq.com/openai/v1/chat/completions',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
           body: JSON.stringify({
-            contents: [{
-              parts: [
-                {
-                  text: `Eres un asistente financiero experto especializado en presupuestos personales.
-
-CONTEXTO COMPLETO DEL PRESUPUESTO EN JSON:
+            model: 'mixtral-8x7b-32768',
+            messages: [
+              {
+                role: 'system',
+                content: 'Eres un asistente financiero experto especializado en presupuestos personales. Responde de manera clara, concisa y útil. Analiza los datos, haz comparativas entre meses si es relevante, e incluye recomendaciones cuando sea apropiado.'
+              },
+              {
+                role: 'user',
+                content: `CONTEXTO COMPLETO DEL PRESUPUESTO EN JSON:
 ${JSON.stringify(contexto, null, 2)}
 
-Responde la pregunta de manera clara, concisa y útil. Analiza los datos, haz comparativas entre meses si es relevante, e incluye recomendaciones cuando sea apropiado.
-
-PREGUNTA DEL USUARIO:
+PREGUNTA:
 ${pregunta}`
-                }
-              ]
-            }],
-            generationConfig: {
-              temperature: 0.7,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 1024,
-            }
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 1024
           }),
         }
       );
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(`Error de Gemini: ${err.error?.message || response.statusText}`);
+        throw new Error(`Error de Groq: ${err.error?.message || response.statusText}`);
       }
 
       const result = await response.json();
-      const respuesta = result.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
+      const respuesta = result.choices?.[0]?.message?.content || 'Sin respuesta';
 
       setConversacion(prev => [
         ...prev,
