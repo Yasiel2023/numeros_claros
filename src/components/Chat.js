@@ -23,27 +23,56 @@ export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesData
     setError('');
 
     try {
-      // Construir contexto optimizado (solo datos relevantes, no JSON completo)
+      // Detectar si pide datos históricos
+      const palabrasClave = ['pasado', 'anterior', 'mes anterior', 'vs', 'comparar', 'comparativa',
+                             'últimos', 'última', 'tendencia', 'evolución', 'promedio', 'histórico',
+                             'semana pasada', 'mes pasado', 'hace'];
+      const esHistorico = palabrasClave.some(palabra =>
+        pregunta.toLowerCase().includes(palabra)
+      );
+
       const mesActualKey = `${año}_${mes}`;
       const mesActual = mesDataByMonth[mesActualKey];
 
-      // Resumen simple en lugar de JSON completo
-      const resumenGastos = {};
-      if (mesActual?.gastos) {
-        Object.keys(mesActual.gastos).forEach(grupoId => {
-          const grupo = defaults?.grupos_gastos?.find(g => g.id === grupoId);
-          const periodos = mesActual.gastos[grupoId] || [];
-          const totalReal = periodos.reduce((sum, p) => {
-            const itemsReales = (p.items || []).reduce((s, it) => s + (it.real || 0), 0);
-            return sum + itemsReales;
-          }, 0);
-          if (grupo) {
-            resumenGastos[grupo.nombre] = totalReal;
+      let contexto;
+
+      if (esHistorico && Object.keys(mesDataByMonth).length > 1) {
+        // Enviar JSON completo minificado para análisis histórico
+        const datosCompletos = {};
+        Object.keys(mesDataByMonth).forEach(mesKey => {
+          const data = mesDataByMonth[mesKey];
+          if (data) {
+            datosCompletos[mesKey] = {
+              ingresos: data.ingresos || [],
+              gastos: data.gastos || {},
+              tarjetas: data.tarjetas || [],
+              objetivoAhorro: data.objetivoAhorro || 0
+            };
           }
         });
-      }
+        contexto = `Presupuesto: ${presupuestoSelec}
+Datos históricos disponibles: ${Object.keys(mesDataByMonth).join(', ')}
 
-      const contexto = `Presupuesto: ${presupuestoSelec}
+CONTEXTO COMPLETO (JSON):
+${JSON.stringify(datosCompletos)}`;
+      } else {
+        // Resumen solo del mes actual
+        const resumenGastos = {};
+        if (mesActual?.gastos) {
+          Object.keys(mesActual.gastos).forEach(grupoId => {
+            const grupo = defaults?.grupos_gastos?.find(g => g.id === grupoId);
+            const periodos = mesActual.gastos[grupoId] || [];
+            const totalReal = periodos.reduce((sum, p) => {
+              const itemsReales = (p.items || []).reduce((s, it) => s + (it.real || 0), 0);
+              return sum + itemsReales;
+            }, 0);
+            if (grupo) {
+              resumenGastos[grupo.nombre] = totalReal;
+            }
+          });
+        }
+
+        contexto = `Presupuesto: ${presupuestoSelec}
 Mes: ${año}-${String(mes + 1).padStart(2, '0')}
 
 INGRESOS: $${(mesActual?.ingresos || []).reduce((s, i) => s + (i.real || 0), 0)}
