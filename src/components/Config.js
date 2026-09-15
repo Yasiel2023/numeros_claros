@@ -49,18 +49,6 @@ export default function Config({ uid, admins = {} }) {
     }
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="page">
-        <div className="section-block">
-          <div className="alert alert-warning">
-            <AlertCircle size={16} />
-            Solo admins pueden acceder a Configuración.
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="page">
@@ -141,6 +129,14 @@ export default function Config({ uid, admins = {} }) {
             ✓ Gemini está configurado. Podrás analizar comprobantes en la pantalla principal.
           </div>
         )}
+
+        <div className={`alert alert-${isAdmin ? 'info' : 'warning'}`}>
+          {isAdmin ? (
+            <>✓ Sos admin de esta app. Tenés acceso a todas las configuraciones.</>
+          ) : (
+            <>Guardando una API key de Gemini te hace admin automáticamente.</>
+          )}
+        </div>
       </div>
 
       <div className="section-block">
