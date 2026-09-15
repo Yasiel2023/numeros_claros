@@ -5,10 +5,12 @@ import { db } from '../firebase';
 import { ref, set, get } from 'firebase/database';
 
 export default function Config({ uid, admins = {} }) {
-  const [apiKey, setLocalApiKey] = useState('');
+  const [groqApiKey, setGroqApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
-  const [showKey, setShowKey] = useState(false);
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -17,9 +19,13 @@ export default function Config({ uid, admins = {} }) {
   useEffect(() => {
     const cargarConfig = async () => {
       try {
-        const snapKey = await get(ref(db, `config/${uid}/groq_api_key`));
-        if (snapKey.exists()) {
-          setLocalApiKey(snapKey.val());
+        const snapGroqKey = await get(ref(db, `config/${uid}/groq_api_key`));
+        if (snapGroqKey.exists()) {
+          setGroqApiKey(snapGroqKey.val());
+        }
+        const snapGeminiKey = await get(ref(db, `config/${uid}/gemini_api_key`));
+        if (snapGeminiKey.exists()) {
+          setGeminiApiKey(snapGeminiKey.val());
         }
         const snapUrl = await get(ref(db, `config/${uid}/groq_url`));
         if (snapUrl.exists()) {
@@ -40,31 +46,30 @@ export default function Config({ uid, admins = {} }) {
 
   const guardar = async () => {
     setError('');
-    if (!apiKey.trim()) {
-      try {
-        await set(ref(db, `config/${uid}/groq_api_key`), null);
-        setLocalApiKey('');
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      } catch (e) {
-        setError(`Error eliminando API key: ${e.message}`);
-      }
+
+    // Validar API keys si están presentes
+    if (groqApiKey.trim() && !groqApiKey.startsWith('gsk_')) {
+      setError('API key de Groq debe empezar con gsk_');
       return;
     }
-
-    if (!apiKey.startsWith('gsk_')) {
-      setError('Parece no ser una API key de Groq válida (deben empezar con gsk_)');
+    if (geminiApiKey.trim() && !geminiApiKey.startsWith('AIza') && !geminiApiKey.startsWith('AQ.')) {
+      setError('API key de Gemini debe empezar con AIza o AQ.');
       return;
     }
 
     try {
       // Guardar en Firebase
-      await set(ref(db, `config/${uid}/groq_api_key`), apiKey);
-      await set(ref(db, `config/${uid}/groq_url`), groqUrl);
-      await set(ref(db, `config/${uid}/groq_model`), groqModel);
+      if (groqApiKey.trim()) {
+        await set(ref(db, `config/${uid}/groq_api_key`), groqApiKey);
+        await set(ref(db, `config/${uid}/groq_url`), groqUrl);
+        await set(ref(db, `config/${uid}/groq_model`), groqModel);
+      }
+      if (geminiApiKey.trim()) {
+        await set(ref(db, `config/${uid}/gemini_api_key`), geminiApiKey);
+      }
 
-      // Registrarse como admin en Firebase (si no lo eres ya)
-      if (!isAdmin) {
+      // Registrarse como admin si guardó alguna key
+      if ((groqApiKey.trim() || geminiApiKey.trim()) && !isAdmin) {
         await set(ref(db, `admins/${uid}`), true);
       }
 
@@ -75,15 +80,27 @@ export default function Config({ uid, admins = {} }) {
     }
   };
 
-  const eliminar = async () => {
+  const eliminarGroq = async () => {
     setError('');
     try {
       await set(ref(db, `config/${uid}/groq_api_key`), null);
-      setLocalApiKey('');
+      setGroqApiKey('');
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
-      setError(`Error eliminando API key: ${e.message}`);
+      setError(`Error eliminando API key de Groq: ${e.message}`);
+    }
+  };
+
+  const eliminarGemini = async () => {
+    setError('');
+    try {
+      await set(ref(db, `config/${uid}/gemini_api_key`), null);
+      setGeminiApiKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(`Error eliminando API key de Gemini: ${e.message}`);
     }
   };
 
@@ -123,18 +140,18 @@ export default function Config({ uid, admins = {} }) {
             <label>API Key de Groq</label>
             <div className="config-input-group">
               <input
-                type={showKey ? 'text' : 'password'}
+                type={showGroqKey ? 'text' : 'password'}
                 className="config-input"
-                value={apiKey}
+                value={groqApiKey}
                 placeholder="gsk_..."
-                onChange={(e) => { setLocalApiKey(e.target.value); setError(''); }}
+                onChange={(e) => { setGroqApiKey(e.target.value); setError(''); }}
               />
               <button
                 className="config-toggle-btn"
-                onClick={() => setShowKey(!showKey)}
-                title={showKey ? 'Ocultar' : 'Mostrar'}
+                onClick={() => setShowGroqKey(!showGroqKey)}
+                title={showGroqKey ? 'Ocultar' : 'Mostrar'}
               >
-                {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                {showGroqKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             <p className="config-hint">
@@ -163,7 +180,7 @@ export default function Config({ uid, admins = {} }) {
               type="text"
               className="config-input"
               value={groqModel}
-              placeholder="llama-3.1-70b-versatile"
+              placeholder="openai/gpt-oss-120b"
               onChange={(e) => { setGroqModel(e.target.value); setError(''); }}
             />
             <p className="config-hint">Modelos disponibles: openai/gpt-oss-120b, openai/gpt-oss-20b, groq/compound</p>
@@ -179,17 +196,75 @@ export default function Config({ uid, admins = {} }) {
                 '💾 Guardar'
               )}
             </button>
-            {apiKey && (
-              <button className="btn-secondary" onClick={eliminar}>
-                <Trash2 size={16} /> Eliminar
+            {groqApiKey && (
+              <button className="btn-secondary" onClick={eliminarGroq}>
+                <Trash2 size={16} /> Eliminar Groq
               </button>
             )}
           </div>
         </div>
 
-        {apiKey && (
+        {groqApiKey && (
           <div className="alert alert-info">
             ✓ Groq está configurado. Podrás hacer preguntas sobre tu presupuesto en el chat.
+          </div>
+        )}
+      </div>
+
+      <div className="section-block">
+        <h2 className="section-title">📷 Google Gemini Vision API</h2>
+        <p className="section-desc">
+          Para analizar fotos de comprobantes y desglosar automáticamente las compras.
+        </p>
+
+        <div className="config-form">
+          <div className="config-field">
+            <label>API Key de Gemini</label>
+            <div className="config-input-group">
+              <input
+                type={showGeminiKey ? 'text' : 'password'}
+                className="config-input"
+                value={geminiApiKey}
+                placeholder="AIza... o AQ..."
+                onChange={(e) => { setGeminiApiKey(e.target.value); setError(''); }}
+              />
+              <button
+                className="config-toggle-btn"
+                onClick={() => setShowGeminiKey(!showGeminiKey)}
+                title={showGeminiKey ? 'Ocultar' : 'Mostrar'}
+              >
+                {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="config-hint">
+              Obtén una key gratis en{' '}
+              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
+                Google AI Studio
+              </a>
+            </p>
+          </div>
+
+          <div className="config-actions">
+            <button className="btn-primary" onClick={guardar}>
+              {saved ? (
+                <>
+                  <Check size={16} /> Guardado
+                </>
+              ) : (
+                '💾 Guardar'
+              )}
+            </button>
+            {geminiApiKey && (
+              <button className="btn-secondary" onClick={eliminarGemini}>
+                <Trash2 size={16} /> Eliminar Gemini
+              </button>
+            )}
+          </div>
+        </div>
+
+        {geminiApiKey && (
+          <div className="alert alert-info">
+            ✓ Gemini está configurado. Podrás analizar comprobantes en la pantalla principal.
           </div>
         )}
 
