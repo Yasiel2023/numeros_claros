@@ -175,7 +175,7 @@ ${pregunta}`
 
       {!apiKey && (
         <div className="chat-nota">
-          ⚙️ Necesitas configurar tu API key de Gemini en Configuración para usar este chat.
+          ⚙️ Necesitas configurar tu API key de Groq en Configuración para usar este chat.
         </div>
       )}
     </div>
