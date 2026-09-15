@@ -16,10 +16,16 @@ export default function AplicarDesglose({
   const [periodoSelec, setPeriodoSelec] = useState(semanas?.[0]?.numero || 1);
   const [matchings, setMatchings] = useState({}); // itemDesgloseIdx -> {tipo: 'matchear' | 'crear', targetItemName?, grupoId?, monto}
 
-  // Items existentes en la semana seleccionada
+  // Items existentes en la semana seleccionada (solo grupos semanales)
   const itemsEnSemana = useMemo(() => {
     const res = {};
     grupos.forEach(g => {
+      // Solo incluir grupos semanales, no mensuales/fijos
+      const frecuencia = g.frecuencia || (g.tipo === 'semanas' ? 'semanal' : 'mensual');
+      if (frecuencia === 'mensual' || frecuencia === 'quincenal' || frecuencia === 'cada10dias') {
+        return; // Skip grupos mensuales
+      }
+
       const periodos = mesData?.gastos[g.id] || [];
       const periodo = periodos.find(p => p.numero === periodoSelec);
       if (!periodo) return;
