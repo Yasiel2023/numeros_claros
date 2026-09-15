@@ -1,30 +1,44 @@
 // src/components/Config.js
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, Eye, EyeOff, Check } from 'lucide-react';
-import { getApiKey, setApiKey, clearApiKey } from '../gemini';
+import { AlertCircle, Eye, EyeOff, Check, Trash2 } from 'lucide-react';
 import { db } from '../firebase';
-import { ref, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 
 export default function Config({ uid, admins = {} }) {
   const [apiKey, setLocalApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
   const isAdmin = admins[uid] === true;
 
   useEffect(() => {
-    if (isAdmin) {
-      const stored = getApiKey();
-      setLocalApiKey(stored);
-    }
-  }, [isAdmin]);
+    const cargarApiKey = async () => {
+      try {
+        const snap = await get(ref(db, `config/${uid}/gemini_api_key`));
+        if (snap.exists()) {
+          setLocalApiKey(snap.val());
+        }
+      } catch (e) {
+        console.error('Error cargando API key:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    cargarApiKey();
+  }, [uid]);
 
   const guardar = async () => {
     setError('');
     if (!apiKey.trim()) {
-      clearApiKey();
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      try {
+        await set(ref(db, `config/${uid}/gemini_api_key`), null);
+        setLocalApiKey('');
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch (e) {
+        setError(`Error eliminando API key: ${e.message}`);
+      }
       return;
     }
 
@@ -34,8 +48,8 @@ export default function Config({ uid, admins = {} }) {
     }
 
     try {
-      // Guardar localmente
-      setApiKey(apiKey);
+      // Guardar en Firebase en config/{uid}/gemini_api_key
+      await set(ref(db, `config/${uid}/gemini_api_key`), apiKey);
 
       // Registrarse como admin en Firebase (si no lo eres ya)
       if (!isAdmin) {
@@ -49,6 +63,27 @@ export default function Config({ uid, admins = {} }) {
     }
   };
 
+  const eliminar = async () => {
+    setError('');
+    try {
+      await set(ref(db, `config/${uid}/gemini_api_key`), null);
+      setLocalApiKey('');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(`Error eliminando API key: ${e.message}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="page">
+        <div className="section-block">
+          <p>Cargando configuración...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page">
@@ -109,16 +144,8 @@ export default function Config({ uid, admins = {} }) {
               )}
             </button>
             {apiKey && (
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  setLocalApiKey('');
-                  clearApiKey();
-                  setSaved(true);
-                  setTimeout(() => setSaved(false), 2000);
-                }}
-              >
-                🗑️ Eliminar
+              <button className="btn-secondary" onClick={eliminar}>
+                <Trash2 size={16} /> Eliminar
               </button>
             )}
           </div>
@@ -142,8 +169,23 @@ export default function Config({ uid, admins = {} }) {
       <div className="section-block">
         <h2 className="section-title">📝 Sobre esta pantalla</h2>
         <p className="section-desc">
-          Solo los admins ven esta pantalla. La API key se guarda <strong>solo en tu navegador</strong>,
-          nunca se sube a la base de datos. Cada vez que uses otra PC o navegador, tendrás que pegarla nuevamente.
+          La API key se guarda en Firebase en <code>config/{'{uid}'}/gemini_api_key</code>.
+          <br />
+          <strong>⚠️ Importante:</strong> Con las reglas de Firebase actuales (abiertas), cualquiera que conozca tu URL
+          de base puede leerla. Después de guardar, vamos a bajar las reglas para proteger esta sección.
+        </p>
+      </div>
+
+      <div className="section-block">
+        <h2 className="section-title">👤 Admin</h2>
+        <p className="section-desc">
+          Los admins se registran en Firebase en <code>admins/{'{uid}'}</code>.
+          <br />
+          {isAdmin ? (
+            <>✓ <strong>Sos admin.</strong> Tu UID está guardado en la base.</>
+          ) : (
+            <>No sos admin todavía. Guardar la API key te hace admin automáticamente.</>
+          )}
         </p>
       </div>
     </div>

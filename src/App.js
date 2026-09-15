@@ -24,7 +24,6 @@ import OnboardingWizard from './components/OnboardingWizard';
 import Config from './components/Config';
 import FotoComprobante from './components/FotoComprobante';
 import AplicarDesglose from './components/AplicarDesglose';
-import { getApiKey } from './gemini';
 import './App.css';
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
@@ -169,6 +168,8 @@ function AppInterna() {
   const closeSidebar = () => setSidebarOpen(false);
   // ── Admins ────────────────────────────────────────────
   const [admins, setAdmins] = useState({});
+  // ── API Key de Gemini ─────────────────────────────────
+  const [geminiApiKey, setGeminiApiKey] = useState('');
   // ── Flujo de foto + desglose ──────────────────────────
   const [showFotoModal, setShowFotoModal] = useState(false);
   const [desglosing, setDesglosing] = useState(false);
@@ -209,6 +210,20 @@ function AppInterna() {
     };
     cargarAdmins();
   }, []);
+
+  // ── Cargar API key de Gemini ──────────────────────────
+  useEffect(() => {
+    if (!user?.uid) return;
+    const cargarGeminiKey = async () => {
+      try {
+        const snap = await get(ref(db, `config/${user.uid}/gemini_api_key`));
+        setGeminiApiKey(snap.exists() ? snap.val() : '');
+      } catch (e) {
+        console.error('Error cargando Gemini API key:', e);
+      }
+    };
+    cargarGeminiKey();
+  }, [user?.uid]);
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
   useEffect(() => {

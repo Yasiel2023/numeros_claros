@@ -83,18 +83,5 @@ IMPORTANTE:
   }
 }
 
-export function getApiKey() {
-  return localStorage.getItem('gemini_api_key') || '';
-}
-
-export function setApiKey(key) {
-  if (key.trim()) {
-    localStorage.setItem('gemini_api_key', key.trim());
-  } else {
-    localStorage.removeItem('gemini_api_key');
-  }
-}
-
-export function clearApiKey() {
-  localStorage.removeItem('gemini_api_key');
-}
+// Las API keys ahora se cargan desde Firebase en App.js
+// y se pasan directamente a los componentes que las necesitan
