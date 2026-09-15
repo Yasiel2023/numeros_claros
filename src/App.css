@@ -634,6 +634,24 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .flujo-desglose-modal { max-width: 700px; }
 .modal-close { background: none; border: none; cursor: pointer; color: var(--text2); padding: 4px; display: flex; align-items: center; }
 .modal-close:hover { color: var(--text); }
+
+/* ── AplicarDesglose ─────────────────────────────────────────– */
+.desglose-paso { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.desglose-paso h3 { font-weight: 600; font-size: 15px; }
+.desglose-paso-desc { font-size: 13px; color: var(--text3); }
+.desglose-item-row { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; }
+.desglose-item-header { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.desglose-item-nombre { font-weight: 600; flex: 1; }
+.desglose-item-precio { font-weight: 600; color: var(--text); }
+.desglose-item-opciones { display: flex; flex-direction: column; gap: 12px; }
+.desglose-opcion { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--surface2); border-radius: 6px; }
+.desglose-radio-label { display: flex; align-items: center; gap: 8px; font-weight: 500; cursor: pointer; }
+.desglose-radio-label input { cursor: pointer; }
+.desglose-item-select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-family: var(--font); font-size: 13px; width: 100%; }
+.desglose-opcion-confirmacion { font-size: 12px; color: var(--teal); font-style: italic; margin-top: 4px; }
+.desglose-resumen { padding: 12px; background: var(--surface2); border-radius: 8px; margin-bottom: 16px; }
+.desglose-resumen h3 { font-size: 14px; margin-bottom: 8px; }
+.resumen-item { font-size: 13px; color: var(--text2); padding: 6px 0; }
 .tarj-pago-form { border-top: 1px solid var(--border2); background: var(--teal-l); padding: 12px 14px; }
 .tarj-pago-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .tarj-pago-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }

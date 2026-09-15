@@ -448,27 +448,31 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
 
   // Aplicar desglose de comprobante
   const aplicarDesglose = (itemsAplicados, itemsNuevos, periodoNumero) => {
+    // itemsAplicados: [{grupoId, periodoNumero, itemName, nuevoMonto}]
+    // itemsNuevos: [{nombre, grupoId, previsto}]
+
     const nuevosPeriodos = periodos.map(p => {
       if (p.numero !== periodoNumero) return p;
 
       let items = [...(p.items || [])];
 
-      // Aplicar a items existentes
-      itemsAplicados.forEach(item => {
-        const existente = items.find(i => i.nombre === item.nombre);
+      // Actualizar items existentes (solo si este grupo está en los aplicados)
+      itemsAplicados.forEach(aplicado => {
+        if (aplicado.grupoId !== grupo.id) return;
+        const existente = items.find(i => i.nombre === aplicado.itemName);
         if (existente) {
-          existente.real = (existente.real || 0) + item.monto;
+          existente.real = (existente.real || 0) + aplicado.nuevoMonto;
           existente.pagado = true;
         }
       });
 
-      // Agregar nuevos items
-      itemsNuevos.forEach(item => {
-        if (item.grupoId === grupo.id) {
+      // Agregar nuevos items que corresponden a este grupo
+      itemsNuevos.forEach(nuevo => {
+        if (nuevo.grupoId === grupo.id) {
           items.push({
-            nombre: item.nombre,
-            previsto: item.previsto,
-            real: item.previsto,
+            nombre: nuevo.nombre,
+            previsto: nuevo.previsto,
+            real: nuevo.previsto,
             pagado: true,
           });
         }

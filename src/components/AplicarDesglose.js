@@ -1,6 +1,6 @@
 // src/components/AplicarDesglose.js
 import React, { useState, useMemo } from 'react';
-import { Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, X } from 'lucide-react';
 
 const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
@@ -10,92 +10,76 @@ export default function AplicarDesglose({
   mesData,
   grupos,
   semanas,         // array de periodos del mes actual (para elegir a cuál aplicar)
-  onAplicar,       // (aplicados: [{grupoId, periodoNumero, item}], nuevos: [{nombre, grupoId, previsto}])
+  onAplicar,       // (aplicados: [{grupoId, periodoNumero, itemName, nuevoMonto}], nuevos: [{nombre, grupoId, previsto}])
   onCancelar,
 }) {
   const [periodoSelec, setPeriodoSelec] = useState(semanas?.[0]?.numero || 1);
-  const [aplicados, setAplicados] = useState([]);
-  const [nuevosItems, setNuevosItems] = useState(desglose.items || []);
+  const [matchings, setMatchings] = useState({}); // itemDesgloseIdx -> {tipo: 'matchear' | 'crear', targetItemName?, grupoId?, monto}
 
-  // Buscar qué items de la compra matchean con items del mes
-  const matcheos = useMemo(() => {
-    const existentes = {};
+  // Items existentes en la semana seleccionada
+  const itemsEnSemana = useMemo(() => {
+    const res = {};
     grupos.forEach(g => {
-      const periodos = mesData.gastos[g.id] || [];
-      periodos.forEach(p => {
-        (p.items || []).forEach(item => {
-          const key = item.nombre.toLowerCase().trim();
-          if (!existentes[key]) existentes[key] = [];
-          existentes[key].push({ ...item, grupoId: g.id, periodoNumero: p.numero });
-        });
+      const periodos = mesData?.gastos[g.id] || [];
+      const periodo = periodos.find(p => p.numero === periodoSelec);
+      if (!periodo) return;
+
+      (periodo.items || []).forEach(item => {
+        if (!res[g.id]) res[g.id] = [];
+        res[g.id].push(item.nombre);
       });
     });
+    return res;
+  }, [mesData, grupos, periodoSelec]);
 
-    return desglose.items.map(item => {
-      const clave = item.nombre.toLowerCase().trim();
-      const matches = existentes[clave] || [];
-      return {
-        original: item,
-        matches,
-        seleccionado: matches.length > 0 ? matches[0] : null,
-      };
-    });
-  }, [desglose, mesData, grupos]);
-
-  // Items que van a crearse nuevos
-  const itemsNuevos = useMemo(() => {
-    return matcheos.filter(m => !m.seleccionado).map(m => ({
-      itemDesglose: m.original,
-      grupoId: null,
-      seleccionado: false,
+  // Procesar cada item del desglose
+  const handleMatchItem = (idx, tipo, grupoId = null, targetItemName = null) => {
+    const monto = desglose.items[idx].total;
+    setMatchings(prev => ({
+      ...prev,
+      [idx]: { tipo, grupoId, targetItemName, monto }
     }));
-  }, [matcheos]);
-
-  const toggleAplicado = (idx, match) => {
-    const currentIndex = aplicados.findIndex(a => a.matchIdx === idx);
-    if (currentIndex >= 0) {
-      aplicados.splice(currentIndex, 1);
-      setAplicados([...aplicados]);
-    } else {
-      setAplicados([...aplicados, { matchIdx: idx, match }]);
-    }
-  };
-
-  const agregarNuevoItem = (grupoId) => {
-    if (!grupoId) return;
-    const nuevoIdx = nuevosItems.findIndex(n => !n.grupoId);
-    if (nuevoIdx >= 0) {
-      const updated = [...nuevosItems];
-      updated[nuevoIdx].grupoId = grupoId;
-      setNuevosItems(updated);
-    }
   };
 
   const confirmar = () => {
-    const aplicarList = aplicados.map(a => ({
-      grupoId: a.match.seleccionado.grupoId,
-      periodoNumero: a.match.seleccionado.periodoNumero,
-      nombre: a.match.original.nombre,
-      monto: a.match.original.total,
-    }));
+    const aplicarList = [];
+    const crearList = [];
 
-    const crearList = nuevosItems
-      .filter(n => n.grupoId)
-      .map(n => ({
-        grupoId: n.grupoId,
-        nombre: n.itemDesglose.nombre,
-        previsto: n.itemDesglose.total,
-      }));
+    desglose.items.forEach((item, idx) => {
+      const matching = matchings[idx];
+      if (!matching) return;
+
+      if (matching.tipo === 'matchear' && matching.targetItemName && matching.grupoId) {
+        // Actualizar item existente
+        aplicarList.push({
+          grupoId: matching.grupoId,
+          periodoNumero: periodoSelec,
+          itemName: matching.targetItemName,
+          nuevoMonto: matching.monto,
+        });
+      } else if (matching.tipo === 'crear' && matching.grupoId) {
+        // Crear nuevo item
+        crearList.push({
+          nombre: item.nombre,
+          grupoId: matching.grupoId,
+          previsto: matching.monto,
+        });
+      }
+    });
 
     onAplicar(aplicarList, crearList, periodoSelec);
   };
+
+  const itemsAprobados = Object.keys(matchings).length === desglose.items.length;
 
   return (
     <div className="modal-overlay">
       <div className="modal-content desglose-modal">
         <div className="modal-header">
-          <h2>📝 Revisar desglose</h2>
-          <p className="text-sm text-gray-500">{desglose.tienda || 'Comprobante'}</p>
+          <h2>📝 Desglose de {desglose.tienda || 'comprobante'}</h2>
+          <button className="modal-close" onClick={onCancelar}>
+            <X size={20} />
+          </button>
         </div>
 
         {desglose.observaciones && (
@@ -104,9 +88,9 @@ export default function AplicarDesglose({
           </div>
         )}
 
-        {/* Selector de semana/período */}
-        <div className="desglose-periodo">
-          <label>¿A qué semana/período lo aplicamos?</label>
+        {/* 1. Selector de semana */}
+        <div className="desglose-paso">
+          <h3>1️⃣ Selecciona la semana</h3>
           <select
             className="cell-select"
             value={periodoSelec}
@@ -120,69 +104,125 @@ export default function AplicarDesglose({
           </select>
         </div>
 
-        {/* Items a aplicar */}
-        {matcheos.length > 0 && (
-          <div className="desglose-section">
-            <h3>✓ Items que matcheamos ({aplicados.length})</h3>
-            <div className="desglose-items">
-              {matcheos.map((m, idx) => {
-                const isAplicado = aplicados.some(a => a.matchIdx === idx);
-                return (
-                  <div key={idx} className={`desglose-item ${isAplicado ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      checked={isAplicado}
-                      onChange={() => toggleAplicado(idx, m)}
-                    />
-                    <div className="desglose-item-info">
-                      <div className="desglose-item-name">{m.original.nombre}</div>
-                      {m.seleccionado && (
-                        <div className="desglose-item-match">
-                          ↳ Matchea con "{m.seleccionado.nombre}" en {grupos.find(g => g.id === m.seleccionado.grupoId)?.nombre}
+        {/* 2. Matchear items del comprobante con items de la semana */}
+        <div className="desglose-paso">
+          <h3>2️⃣ Asignar items del comprobante</h3>
+          <p className="desglose-paso-desc">Para cada item, elegí si matchea con uno existente o si lo creás nuevo</p>
+
+          <div className="desglose-items">
+            {desglose.items.map((item, idx) => {
+              const matching = matchings[idx];
+              const isMatched = matching?.tipo === 'matchear';
+              const isCreating = matching?.tipo === 'crear';
+
+              return (
+                <div key={idx} className="desglose-item-row">
+                  <div className="desglose-item-header">
+                    <div className="desglose-item-nombre">{item.nombre}</div>
+                    <div className="desglose-item-precio">${fmt(item.total)}</div>
+                  </div>
+
+                  <div className="desglose-item-opciones">
+                    {/* Opción 1: Matchear con existente */}
+                    <div className="desglose-opcion">
+                      <label className="desglose-radio-label">
+                        <input
+                          type="radio"
+                          name={`item-${idx}`}
+                          checked={isMatched}
+                          onChange={() => handleMatchItem(idx, 'matchear')}
+                        />
+                        Matchea con...
+                      </label>
+                      {isMatched && (
+                        <select
+                          className="desglose-item-select"
+                          value={matching.targetItemName || ''}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const grupoId = Object.keys(itemsEnSemana).find(gid =>
+                              itemsEnSemana[gid].includes(e.target.value)
+                            );
+                            handleMatchItem(idx, 'matchear', grupoId, e.target.value);
+                          }}
+                        >
+                          <option value="">Elige un item existente...</option>
+                          {Object.keys(itemsEnSemana).map(grupoId =>
+                            itemsEnSemana[grupoId].map(itemName => (
+                              <option key={`${grupoId}-${itemName}`} value={itemName}>
+                                {itemName} ({grupos.find(g => g.id === grupoId)?.nombre})
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      )}
+                      {isMatched && matching.targetItemName && (
+                        <div className="desglose-opcion-confirmacion">
+                          ✓ Se sumará ${fmt(item.total)} a "{matching.targetItemName}"
                         </div>
                       )}
                     </div>
-                    <div className="desglose-item-monto">${fmt(m.original.total)}</div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
-        {/* Items a crear */}
-        {itemsNuevos.length > 0 && (
-          <div className="desglose-section">
-            <h3>+ Crear nuevos items ({itemsNuevos.filter(n => n.grupoId).length})</h3>
-            <p className="text-sm text-gray-500">Items que no encontramos en el mes — elige a qué grupo agregarlos</p>
-            <div className="desglose-items">
-              {itemsNuevos.map((n, idx) => (
-                <div key={idx} className={`desglose-item ${n.grupoId ? 'selected' : ''}`}>
-                  <div className="desglose-item-info">
-                    <div className="desglose-item-name">{n.itemDesglose.nombre}</div>
-                    {!n.grupoId && (
-                      <select
-                        className="desglose-item-select"
-                        onChange={(e) => agregarNuevoItem(e.target.value)}
-                      >
-                        <option value="">Elige grupo...</option>
-                        {grupos.map(g => (
-                          <option key={g.id} value={g.id}>{g.nombre}</option>
-                        ))}
-                      </select>
-                    )}
-                    {n.grupoId && (
-                      <div className="desglose-item-match">
-                        → Se agregará a {grupos.find(g => g.id === n.grupoId)?.nombre}
-                      </div>
-                    )}
+                    {/* Opción 2: Crear nuevo */}
+                    <div className="desglose-opcion">
+                      <label className="desglose-radio-label">
+                        <input
+                          type="radio"
+                          name={`item-${idx}`}
+                          checked={isCreating}
+                          onChange={() => handleMatchItem(idx, 'crear')}
+                        />
+                        Crear como nuevo en...
+                      </label>
+                      {isCreating && (
+                        <select
+                          className="desglose-item-select"
+                          value={matching.grupoId || ''}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            handleMatchItem(idx, 'crear', e.target.value);
+                          }}
+                        >
+                          <option value="">Elige grupo...</option>
+                          {grupos.map(g => (
+                            <option key={g.id} value={g.id}>{g.nombre}</option>
+                          ))}
+                        </select>
+                      )}
+                      {isCreating && matching.grupoId && (
+                        <div className="desglose-opcion-confirmacion">
+                          ✓ Se creará "{item.nombre}" con ${fmt(item.total)} en {grupos.find(g => g.id === matching.grupoId)?.nombre}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="desglose-item-monto">${fmt(n.itemDesglose.total)}</div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+
+        {/* Resumen */}
+        <div className="desglose-resumen">
+          <h3>Resumen</h3>
+          {Object.keys(matchings).map((idx) => {
+            const matching = matchings[idx];
+            const item = desglose.items[parseInt(idx)];
+            if (matching.tipo === 'matchear') {
+              return (
+                <div key={idx} className="resumen-item">
+                  <span>✓ {item.nombre} → +${fmt(item.total)} a "{matching.targetItemName}"</span>
+                </div>
+              );
+            } else {
+              return (
+                <div key={idx} className="resumen-item">
+                  <span>+ {item.nombre} → ${fmt(item.total)} (nuevo en {grupos.find(g => g.id === matching.grupoId)?.nombre})</span>
+                </div>
+              );
+            }
+          })}
+        </div>
 
         {/* Acciones */}
         <div className="modal-footer">
@@ -192,9 +232,10 @@ export default function AplicarDesglose({
           <button
             className="btn-primary"
             onClick={confirmar}
-            disabled={aplicados.length === 0 && itemsNuevos.filter(n => n.grupoId).length === 0}
+            disabled={!itemsAprobados}
+            title={!itemsAprobados ? 'Asigná todos los items primero' : ''}
           >
-            <CheckCircle2 size={16} /> Aplicar cambios
+            <CheckCircle2 size={16} /> Aplicar ({Object.keys(matchings).length}/{desglose.items.length})
           </button>
         </div>
       </div>
