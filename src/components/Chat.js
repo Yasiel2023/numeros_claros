@@ -2,6 +2,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader, AlertCircle } from 'lucide-react';
 
+// Importar Chart.js del CDN
+if (typeof window !== 'undefined' && !window.Chart) {
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js';
+  document.head.appendChild(script);
+}
+
 export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesDataByMonth, defaults, año, mes }) {
   const [presupuestoSelec, setPresupuestoSelec] = useState(presupuestos?.[0]?.id || '');
   const [pregunta, setPregunta] = useState('');
@@ -14,6 +21,44 @@ export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesData
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+  }, [conversacion]);
+
+  // Renderizar gráficos con Chart.js
+  useEffect(() => {
+    conversacion.forEach((msg, idx) => {
+      if (msg.data?.grafico) {
+        setTimeout(() => {
+          const canvas = document.getElementById(`chart-${idx}`);
+          if (canvas && window.Chart) {
+            const ctx = canvas.getContext('2d');
+            const g = msg.data.grafico;
+            new window.Chart(ctx, {
+              type: g.tipo || 'bar',
+              data: {
+                labels: g.labels || [],
+                datasets: [{
+                  label: g.titulo || 'Datos',
+                  data: g.data || [],
+                  backgroundColor: [
+                    '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                    '#FF9F40', '#FF6384', '#C9CBCF'
+                  ].slice(0, (g.data || []).length),
+                  borderColor: '#ddd',
+                  borderWidth: 1,
+                }]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { display: g.tipo !== 'bar' }
+                }
+              }
+            });
+          }
+        }, 100);
+      }
+    });
   }, [conversacion]);
 
   const hacerPregunta = async () => {
@@ -99,7 +144,23 @@ Datos disponibles: Presupuesto de ${año}`;
             messages: [
               {
                 role: 'system',
-                content: 'Eres un asistente financiero experto especializado en presupuestos personales. Responde de manera clara, concisa y útil.'
+                content: `Eres un asistente financiero experto. Responde SIEMPRE en formato JSON con esta estructura:
+{
+  "titulo": "Título de la respuesta",
+  "explicacion": "Explicación en texto claro",
+  "tabla": [
+    {"concepto": "...", "valor": "..."},
+    ...
+  ],
+  "grafico": {
+    "tipo": "bar|pie|line",
+    "labels": ["etiqueta1", "etiqueta2"],
+    "data": [valor1, valor2]
+  },
+  "conclusion": "Conclusión y recomendaciones"
+}
+
+Si no necesitas tabla o gráfico, omite esos campos. Siempre devuelve JSON válido.`
               },
               {
                 role: 'user',
@@ -121,12 +182,20 @@ ${pregunta}`
       }
 
       const result = await response.json();
-      const respuesta = result.choices?.[0]?.message?.content || 'Sin respuesta';
+      const respuestaRaw = result.choices?.[0]?.message?.content || '{}';
+
+      // Parsear respuesta JSON
+      let respuestaData;
+      try {
+        respuestaData = JSON.parse(respuestaRaw);
+      } catch (e) {
+        respuestaData = { explicacion: respuestaRaw };
+      }
 
       setConversacion(prev => [
         ...prev,
         { rol: 'usuario', texto: pregunta },
-        { rol: 'asistente', texto: respuesta }
+        { rol: 'asistente', data: respuestaData }
       ]);
       setPregunta('');
     } catch (e) {
@@ -172,7 +241,32 @@ ${pregunta}`
         {conversacion.map((msg, idx) => (
           <div key={idx} className={`chat-mensaje ${msg.rol}`}>
             <div className="chat-rol">{msg.rol === 'usuario' ? 'Vos' : '🤖 Asistente'}</div>
-            <div className="chat-texto">{msg.texto}</div>
+            {msg.texto && <div className="chat-texto">{msg.texto}</div>}
+            {msg.data && (
+              <div className="chat-respuesta-estructurada">
+                {msg.data.titulo && <h3>{msg.data.titulo}</h3>}
+                {msg.data.explicacion && <p>{msg.data.explicacion}</p>}
+
+                {msg.data.tabla && (
+                  <table className="chat-tabla">
+                    <tbody>
+                      {msg.data.tabla.map((fila, i) => (
+                        <tr key={i}>
+                          <td><strong>{fila.concepto}</strong></td>
+                          <td>{fila.valor}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+
+                {msg.data.grafico && (
+                  <canvas id={`chart-${idx}`} style={{maxHeight: '300px', marginTop: '15px'}}></canvas>
+                )}
+
+                {msg.data.conclusion && <p className="chat-conclusion"><em>{msg.data.conclusion}</em></p>}
+              </div>
+            )}
           </div>
         ))}
         {loading && (

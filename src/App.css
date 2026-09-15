@@ -668,6 +668,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .chat-texto { padding: 10px 12px; border-radius: 8px; line-height: 1.5; font-size: 13px; }
 .chat-mensaje.usuario .chat-texto { background: var(--teal); color: #fff; }
 .chat-mensaje.asistente .chat-texto { background: var(--surface2); color: var(--text); }
+.chat-respuesta-estructurada { padding: 12px; background: var(--surface2); border-radius: 8px; margin-top: 8px; }
+.chat-respuesta-estructurada h3 { margin: 0 0 10px 0; font-size: 15px; color: var(--teal); }
+.chat-respuesta-estructurada p { margin: 8px 0; font-size: 13px; color: var(--text); line-height: 1.5; }
+.chat-tabla { width: 100%; margin: 12px 0; border-collapse: collapse; font-size: 12px; }
+.chat-tabla tr { border-bottom: 1px solid var(--surface3); }
+.chat-tabla td { padding: 8px; text-align: left; }
+.chat-tabla td:last-child { text-align: right; font-weight: 500; color: var(--teal); }
+.chat-tabla tr:hover { background: var(--surface1); }
+.chat-conclusion { font-size: 12px; color: var(--text-secondary); font-style: italic; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--surface3); }
 .chat-input-group { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
 .chat-input { flex: 1; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-family: var(--font); font-size: 13px; }
 .chat-input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 2px rgba(13,148,136,0.1); }
