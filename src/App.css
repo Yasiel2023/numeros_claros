@@ -626,6 +626,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .btn-large:disabled { opacity: .55; cursor: not-allowed; }
 
 .section-desc { font-size: 14px; color: var(--text2); margin-bottom: 16px; }
+
+/* ── Tarjetas header con múltiples botones ────────────────────– */
+.section-header-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── FlujoDesglose modal ──────────────────────────────────────– */
+.flujo-desglose-modal { max-width: 700px; }
+.modal-close { background: none; border: none; cursor: pointer; color: var(--text2); padding: 4px; display: flex; align-items: center; }
+.modal-close:hover { color: var(--text); }
 .tarj-pago-form { border-top: 1px solid var(--border2); background: var(--teal-l); padding: 12px 14px; }
 .tarj-pago-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .tarj-pago-btns { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }

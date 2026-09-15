@@ -4,7 +4,8 @@
 // La data llega como array de periodos: [{numero, label, items:[]}]
 // Compatibilidad atras: si llegan items planos se envuelven en un unico periodo.
 import React, { useState } from 'react';
-import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Check, X, ChevronDown, ChevronUp, Camera } from 'lucide-react';
+import FlujoDesglose from './FlujoDesglose';
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-UY', {
@@ -364,8 +365,9 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [] }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [], apiKey = '', mesData = null, grupos = [] }) {
   const [mostrarPagados, setMostrarPagados] = useState(true);
+  const [showFlujoDesglose, setShowFlujoDesglose] = useState(false);
   const periodos    = toPeriodos(data || []);
   const showHeaders = periodos.length > 1;
 
@@ -444,6 +446,41 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
     onChange(nuevosPeriodos, nuevasTarjetas);
   };
 
+  // Aplicar desglose de comprobante
+  const aplicarDesglose = (itemsAplicados, itemsNuevos, periodoNumero) => {
+    const nuevosPeriodos = periodos.map(p => {
+      if (p.numero !== periodoNumero) return p;
+
+      let items = [...(p.items || [])];
+
+      // Aplicar a items existentes
+      itemsAplicados.forEach(item => {
+        const existente = items.find(i => i.nombre === item.nombre);
+        if (existente) {
+          existente.real = (existente.real || 0) + item.monto;
+          existente.pagado = true;
+        }
+      });
+
+      // Agregar nuevos items
+      itemsNuevos.forEach(item => {
+        if (item.grupoId === grupo.id) {
+          items.push({
+            nombre: item.nombre,
+            previsto: item.previsto,
+            real: item.previsto,
+            pagado: true,
+          });
+        }
+      });
+
+      return { ...p, items };
+    });
+
+    onChange(nuevosPeriodos);
+    setShowFlujoDesglose(false);
+  };
+
   // Totales globales (suma de todos los periodos)
   const totalPrev  = periodos.reduce((s, p) =>
     s + (p.items || []).reduce((ss, i) => ss + (i.previsto || 0), 0), 0);
@@ -469,9 +506,18 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
           )}
         </h2>
         <div className="section-header-right">
+          {apiKey && (
+            <button
+              className="add-row-btn"
+              onClick={() => setShowFlujoDesglose(true)}
+              title="Capturar comprobante con la cámara"
+            >
+              <Camera size={14}/> Foto
+            </button>
+          )}
           <label className="checkbox-filter">
-            <input 
-              type="checkbox" 
+            <input
+              type="checkbox"
               checked={mostrarPagados}
               onChange={(e) => setMostrarPagados(e.target.checked)}
             />
@@ -515,6 +561,18 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
           />
         );
       })}
+
+      {showFlujoDesglose && (
+        <FlujoDesglose
+          apiKey={apiKey}
+          mesData={mesData}
+          grupos={grupos}
+          año={anio}
+          mes={mes}
+          onAplicar={aplicarDesglose}
+          onClose={() => setShowFlujoDesglose(false)}
+        />
+      )}
     </div>
   );
 }

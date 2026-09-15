@@ -923,6 +923,9 @@ function AppInterna() {
                       }
                       anio={año}
                       mes={mes}
+                      apiKey={geminiApiKey}
+                      mesData={mesData}
+                      grupos={grupos}
                     />
                   </div>
                 );
