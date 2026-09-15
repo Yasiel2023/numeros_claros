@@ -42,8 +42,8 @@ export default function Config({ uid, admins = {} }) {
       return;
     }
 
-    if (!apiKey.startsWith('AIza')) {
-      setError('Parece no ser una API key de Google válida (deben empezar con AIza)');
+    if (!apiKey.startsWith('AIza') && !apiKey.startsWith('AQ.')) {
+      setError('Parece no ser una API key de Google válida (deben empezar con AIza o AQ.)');
       return;
     }
 
