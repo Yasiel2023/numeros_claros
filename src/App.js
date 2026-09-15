@@ -13,6 +13,7 @@ import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
 import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
+import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financiaciones';
 import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard, Smile, PiggyBank, Menu } from 'lucide-react';
 import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
@@ -20,6 +21,10 @@ import InvitacionesBanner from './components/InvitacionesBanner';
 import Tarjetas from './components/Tarjetas';
 import NuevoMesModal from './components/NuevoMesModal';
 import OnboardingWizard from './components/OnboardingWizard';
+import Config from './components/Config';
+import FotoComprobante from './components/FotoComprobante';
+import AplicarDesglose from './components/AplicarDesglose';
+import { getApiKey } from './gemini';
 import './App.css';
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
@@ -62,7 +67,13 @@ function normalizeMesData(raw) {
     ingresos: toArray(raw.ingresos || []),
     gastos,
     semanas:  toArray(raw.semanas  || []).map(s => ({ ...s, items: toArray(s.items || []) })),
-    tarjetas: toArray(raw.tarjetas || []),
+    // Las tarjetas necesitan id para poder vincularles pagos de gastos.
+    // Las creadas antes de esa funcionalidad no lo tienen: se les asigna aca.
+    tarjetas: toArray(raw.tarjetas || []).map((t, i) => ({
+      ...t,
+      id: t?.id || `tj_${i}_${(t?.nombre || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}`,
+      ...(t?.tipo === 'debito' ? { saldos: toArray(t.saldos || []) } : {}),
+    })),
   };
 }
 
@@ -112,6 +123,7 @@ const NAV_FIJOS_FIN = [
   { key: 'resumen',    label: 'Resumen',          icon: BarChart2,  emoji: '📊' },
   { key: 'caja',       label: 'Caja de Ahorro',  icon: PiggyBank,  emoji: '🐷' },
   { key: 'plantillas', label: 'Plantillas',       icon: Settings,   emoji: '⚙️' },
+  { key: 'config',     label: 'Configuración',    icon: Settings,   emoji: '⚙️' },
 ];
 
 // ── App interna (usuario autenticado) ─────────────────────────
@@ -148,10 +160,20 @@ function AppInterna() {
   const [nuevoMesPendiente, setNuevoMesPendiente] = useState(false);
   const saveTimer = useRef(null);
   const [cajaData, setCajaData] = useState(null);
+  // ── Compras en cuotas (nivel presupuesto) ─────────────────────
+  const [financiaciones, setFinanciaciones] = useState([]);
   // ── Onboarding primer uso ─────────────────────────────────────
-  const [showOnboarding, setShowOnboarding] = useState(false);  // ── Sidebar mobile ─────────────────────────────────────
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  // ── Sidebar mobile ─────────────────────────────────────
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const closeSidebar = () => setSidebarOpen(false);
+  // ── Admins ────────────────────────────────────────────
+  const [admins, setAdmins] = useState({});
+  // ── Flujo de foto + desglose ──────────────────────────
+  const [showFotoModal, setShowFotoModal] = useState(false);
+  const [desglosing, setDesglosing] = useState(false);
+  const [desglozeResult, setDesglozeResult] = useState(null);
+  const [fotoOriginal, setFotoOriginal] = useState(null);
   // ── Grupos de gastos del presupuesto activo ───────────────────
   const grupos = toArray(defaults?.grupos_gastos || []);
 
@@ -174,6 +196,19 @@ function AppInterna() {
   // ownerUid del presupuesto activo (puede ser otro usuario en presupuestos compartidos)
   const ownerUidActual = presupuestos.find(p => p.id === presupuestoActual)?.ownerUid || user.uid;
   const rolActual = presupuestos.find(p => p.id === presupuestoActual)?.rol || 'owner';
+
+  // ── Cargar admins ────────────────────────────────────────────
+  useEffect(() => {
+    const cargarAdmins = async () => {
+      try {
+        const snap = await get(ref(db, 'admins'));
+        setAdmins(snap.exists() ? snap.val() : {});
+      } catch (e) {
+        console.error('Error cargando admins:', e);
+      }
+    };
+    cargarAdmins();
+  }, []);
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
   useEffect(() => {
@@ -211,6 +246,29 @@ function AppInterna() {
     setCajaData(data);
     guardarCaja(data);
   }, [guardarCaja]);
+
+  // ── Cargar y guardar financiaciones (nivel presupuesto) ──────
+  useEffect(() => {
+    if (!presupuestoActual || !ownerUidActual) return;
+    const cargarFin = async () => {
+      try {
+        const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`));
+        setFinanciaciones(snap.exists() ? toArray(snap.val()) : []);
+      } catch (e) {
+        console.error('Error cargando financiaciones:', e);
+        setFinanciaciones([]);
+      }
+    };
+    cargarFin();
+  }, [presupuestoActual, ownerUidActual]);
+
+  const updateFinanciaciones = useCallback(async (lista) => {
+    setFinanciaciones(lista);
+    if (!presupuestoActual) return;
+    try {
+      await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`), lista);
+    } catch (e) { console.error('Error guardando financiaciones:', e); }
+  }, [presupuestoActual, ownerUidActual]);
 
   // ── Cargar plantillas globales /defaults ─────────────────────
   useEffect(() => {
@@ -457,7 +515,7 @@ function AppInterna() {
   }, [autoGuardar]);
 
   // ── Confirmar nuevo mes desde modal ─────────────────────────────────────────
-  const confirmarNuevoMes = useCallback((templateId, objetivo) => {
+  const confirmarNuevoMes = useCallback(async (templateId, objetivo) => {
     let defaultsParaMes = defaults;
     if (templateId) {
       const tpl = userTemplates.find(t => t.id === templateId);
@@ -467,10 +525,25 @@ function AppInterna() {
         defaultsParaMes = tplData;
       }
     }
-    const data = { ...initMesData(año, mes, defaultsParaMes), objetivoAhorro: objetivo || 0 };
+    let data = { ...initMesData(año, mes, defaultsParaMes), objetivoAhorro: objetivo || 0 };
+
+    // Arrastrar las tarjetas del mes anterior: el credito arranca en cero y
+    // el debito conserva su ultimo saldo.
+    try {
+      const mesPrev = mes === 0 ? 11 : mes - 1;
+      const añoPrev = mes === 0 ? año - 1 : año;
+      const snapPrev = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${añoPrev}_${mesPrev}`));
+      if (snapPrev.exists()) {
+        data.tarjetas = tarjetasParaMesNuevo(toArray(snapPrev.val().tarjetas || []));
+      }
+    } catch (e) { console.error('Error arrastrando tarjetas:', e); }
+
+    // Cargar las cuotas que le tocan a este mes
+    data = aplicarCuotas(data, financiaciones, año, mes);
+
     setNuevoMesPendiente(false);
     updateMesData(data);
-  }, [año, mes, defaults, userTemplates, updateMesData]); // eslint-disable-line
+  }, [año, mes, defaults, userTemplates, updateMesData, financiaciones, ownerUidActual, presupuestoActual]); // eslint-disable-line
 
   // ── Guardar mes actual como plantilla de usuario ─────────────
   const guardarMesComoPlantilla = useCallback(async () => {
@@ -825,10 +898,12 @@ function AppInterna() {
                     <GrupoGastos
                       grupo={grupo}
                       data={mesData?.gastos?.[grupoId]}
-                      onChange={periodos =>
+                      tarjetas={mesData?.tarjetas || []}
+                      onChange={(periodos, tarjetas) =>
                         updateMesData({
                           ...mesData,
                           gastos: { ...(mesData?.gastos || {}), [grupoId]: periodos },
+                          ...(tarjetas ? { tarjetas } : {}),
                         })
                       }
                       anio={año}
@@ -843,7 +918,14 @@ function AppInterna() {
                   <div className="page-header"><h1 className="page-title">💳 Tarjetas — {MESES_ES[mes]} {año}</h1></div>
                   <Tarjetas
                     data={mesData?.tarjetas}
+                    gastos={mesData?.gastos}
                     onChange={tarj => updateMesData({ ...mesData, tarjetas: tarj })}
+                    financiaciones={financiaciones}
+                    onChangeFinanciaciones={updateFinanciaciones}
+                    cuotasPendientes={cuotasPendientes(financiaciones, mesData, año, mes)}
+                    onAplicarCuotas={() => updateMesData(aplicarCuotas(mesData, financiaciones, año, mes))}
+                    anio={año}
+                    mes={mes}
                   />
                 </div>
               )}
@@ -863,6 +945,9 @@ function AppInterna() {
                   </div>
                   <Resumen mesData={mesData} onChange={updateMesData} grupos={grupos} />
                 </div>
+              )}
+              {vista === 'config' && (
+                <Config uid={user.uid} admins={admins} />
               )}
             </>
           )}

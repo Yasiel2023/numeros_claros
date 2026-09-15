@@ -46,7 +46,10 @@ App
              ├─ Tarjetas                 — tarjetas de crédito (deuda pendiente) y débito (saldo + historial)
              ├─ Resumen                  — tabla + gráfico previsto vs real, saldo libre, objetivo ahorro
              ├─ CajaAhorro               — depósitos UYU, conversión UYU→USD, ajustes manuales, historial
-             └─ DefaultsManager          — editor de plantillas (tab "Mis Plantillas" y tab "Plantillas Globales")
+             ├─ DefaultsManager          — editor de plantillas (tab "Mis Plantillas" y tab "Plantillas Globales")
+             ├─ Config                   — configuración de integraciones (solo admins); almacena API key de Gemini en localStorage
+             ├─ FotoComprobante          — captura de foto con cámara o portapapeles, envía a Gemini Vision
+             └─ AplicarDesglose          — preview del desglose, matching de items con el mes, crear nuevos items
 ```
 
 ### El patrón "grupos de gastos" (el corazón del modelo actual)
@@ -71,6 +74,28 @@ Esto **reemplazó** un modelo anterior con componentes fijos (`Basicos.js`, `Imp
 ### Normalización de arrays desde RTDB
 
 Realtime Database serializa arrays con huecos (o con push-keys) como objetos `{ "0": ..., "2": ... }` en vez de arrays JS. Por eso casi todos los módulos (`App.js`, `DefaultsManager.js`, `OnboardingWizard.js`) repiten una función `toArray()` que ordena las claves numéricamente y devuelve un array real. `App.js` además tiene `normalizeMesData()`, que además migra formatos viejos de `mesData` (gastos como items planos → como array de períodos) para mantener compatibilidad con meses guardados antes de introducir el modelo de "grupos + períodos".
+
+### Modelo contable: flujo de caja
+
+Lo que se carga a una tarjeta de **crédito** no cuenta como gasto real del mes en el momento de cargarlo — solo aumenta la deuda de la tarjeta. El gasto real se registra **cuando se paga la tarjeta**. Los pagos en efectivo o con débito, en cambio, cuentan al instante.
+
+En la práctica esto significa:
+
+- Un ítem de gasto marcado como pagado con tarjeta de crédito queda fuera de "real pagado" de su grupo (`cuentaComoGastoReal` en [`src/tarjetas.js`](../src/tarjetas.js)).
+- El aporte de una tarjeta de crédito al **presupuestado** del mes es solo lo que no está contado en otro lado: sus cuotas y sus cargos propios (`previstoPropioTarjeta`). Los gastos que se le cargaron ya figuran previstos en el grupo al que pertenecen.
+- El aporte al **real** es lo efectivamente pagado de la tarjeta (`pagadoTarjeta`), que admite pagos parciales.
+
+Los helpers compartidos por `Tarjetas.js`, `Dashboard.js` y `Resumen.js` viven en [`src/tarjetas.js`](../src/tarjetas.js) para que las tres pantallas calculen igual.
+
+### Integración con Gemini Vision API
+
+Un flujo nuevo (en construcción) para capturar comprobantes y desglosarlos automáticamente. **Solo para admins** (definidos en el nodo `/admins` en Firebase). La API key:
+
+- Se guarda **solo en localStorage** del navegador, nunca sube a la base.
+- Debe ser generada por el usuario en [Google AI Studio](https://aistudio.google.com/app/apikey).
+- Se usa desde el cliente para enviar imágenes a Gemini 2.0 Flash.
+
+El flujo es: foto (cámara o paste) → Gemini Vision → JSON de items → preview de matching → aplicar al mes actual. Los helpers viven en [`src/gemini.js`](../src/gemini.js); los componentes en `FotoComprobante.js` y `AplicarDesglose.js`.
 
 ### Formato "previsto / real / pagado"
 

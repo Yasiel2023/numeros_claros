@@ -1,6 +1,7 @@
 // src/components/Resumen.js
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { pagadoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
 
 const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
@@ -20,19 +21,22 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
   const totalIngReal = ingresos.reduce((s, i) => s + (i.real || 0), 0);
 
   // ── Grupos dinámicos ─────────────────────────────────────────
+  // Lo cargado a una tarjeta de credito no cuenta como gasto real hasta pagar la tarjeta
+  const idsCred = idsCredito(tarjetas);
+
   const gruposData = grupos.map(g => {
     const periodos = gastos[g.id] || [];
     const items = periodos.flatMap(p => p.items || []);
     const prev = items.reduce((s, i) => s + (i.previsto || 0), 0);
-    const real = items.filter(i => i.pagado === true).reduce((s, i) => s + (i.real || 0), 0);
+    const real = items.filter(i => cuentaComoGastoReal(i, idsCred)).reduce((s, i) => s + (i.real || 0), 0);
     return { id: g.id, nombre: g.nombre, icono: g.icono || '', prev, real };
   });
 
-  // ── Tarjetas ──────────────────────────────────────────────────
-  const totalTarjetasPrevUYU = tarjetas.filter(t => t.moneda === 'UYU').reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasRealUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado === true).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasPrevUSD = tarjetas.filter(t => t.moneda === 'USD').reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasPendUSD = tarjetas.filter(t => t.moneda === 'USD' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
+  // ── Tarjetas (una fila por tarjeta de credito) ────────────────
+  const credito = tarjetas.filter(t => t.tipo !== 'debito' && (t.monto || 0) > 0);
+  const totalTarjetasPrevUYU = credito.filter(t => t.moneda === 'UYU')
+    .reduce((s, t) => s + previstoPropioTarjeta(t, gastos), 0);
+  const totalTarjetasRealUYU = credito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + pagadoTarjeta(t), 0);
 
   // ── Totales ───────────────────────────────────────────────────
   const totalGastosPrev = gruposData.reduce((s, g) => s + g.prev, 0) + totalTarjetasPrevUYU + objetivoAhorro;
@@ -49,9 +53,11 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
       prev: g.prev,
       real: g.real,
     })),
-    ...(totalTarjetasPrevUYU > 0
-      ? [{ name: '💳 Tarjetas', prev: totalTarjetasPrevUYU, real: totalTarjetasRealUYU }]
-      : []),
+    ...credito.filter(t => t.moneda === 'UYU').map(t => ({
+      name: `💳 ${t.nombre}`,
+      prev: previstoPropioTarjeta(t, gastos),
+      real: pagadoTarjeta(t),
+    })),
     ...(objetivoAhorro > 0
       ? [{ name: '🎯 Ahorro', prev: objetivoAhorro, real: objetivoAhorro }]
       : []),
@@ -82,16 +88,27 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
                   <td>{totalIngPrev > 0 ? Math.round(g.prev / totalIngPrev * 100) : 0}%</td>
                 </tr>
               ))}
-              {totalTarjetasPrevUYU > 0 && (
-                <tr>
-                  <td>💳 Tarjetas</td>
-                  <td>${fmt(totalTarjetasPrevUYU)}{totalTarjetasPrevUSD > 0 && ` + ${fmtUSD(totalTarjetasPrevUSD)}`}</td>
-                  <td className={totalTarjetasRealUYU > 0 ? 'neg' : 'pos'}>
-                    ${fmt(totalTarjetasRealUYU)}{totalTarjetasPendUSD > 0 && ` + ${fmtUSD(totalTarjetasPendUSD)}`}
-                  </td>
-                  <td>{totalIngPrev > 0 ? Math.round(totalTarjetasPrevUYU / totalIngPrev * 100) : 0}%</td>
-                </tr>
-              )}
+              {credito.map(t => {
+                const esUSD  = t.moneda === 'USD';
+                const money  = (v) => esUSD ? fmtUSD(v) : `$${fmt(v)}`;
+                const pag    = pagadoTarjeta(t);
+                const propio = previstoPropioTarjeta(t, gastos);
+                return (
+                  <tr key={t.id || t.nombre}>
+                    <td>
+                      💳 {t.nombre}{esUSD && <span className="badge-fijo">USD</span>}
+                      {propio < (t.monto || 0) && (
+                        <span className="resumen-nota-tarjeta">
+                          deuda {money(t.monto || 0)} — el resto ya está en sus grupos
+                        </span>
+                      )}
+                    </td>
+                    <td>{money(propio)}</td>
+                    <td className={pag > 0 ? 'neg' : ''}>{money(pag)}</td>
+                    <td>{!esUSD && totalIngPrev > 0 ? Math.round(propio / totalIngPrev * 100) : '—'}</td>
+                  </tr>
+                );
+              })}
               {objetivoAhorro > 0 && (
                 <tr className="row-ahorro">
                   <td>

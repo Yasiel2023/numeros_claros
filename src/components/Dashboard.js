@@ -2,6 +2,7 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Wallet, DollarSign, Target } from 'lucide-react';
 import { MESES_ES } from '../constants';
+import { pagadoTarjeta, saldoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
 
 const fmt    = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0);
@@ -24,10 +25,13 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   };
 
   // ── Grupos dinámicos ──────────────────────────────────────────
+  // Lo cargado a una tarjeta de credito no cuenta como gasto real hasta pagar la tarjeta
+  const idsCred = idsCredito(tarjetas);
+
   const gruposResumen = grupos.map(g => {
     const items    = flatItems(gastos[g.id]);
     const previsto = items.reduce((s, i) => s + (i.previsto || 0), 0);
-    const real     = items.filter(i => i.pagado === true).reduce((s, i) => s + (i.real || 0), 0);
+    const real     = items.filter(i => cuentaComoGastoReal(i, idsCred)).reduce((s, i) => s + (i.real || 0), 0);
     const pend     = items.filter(i => i.pagado !== true && (i.previsto || 0) > 0)
                           .map(i => ({ ...i, tipo: g.nombre, grupoId: g.id, emoji: g.icono || '' }));
     const pct      = previsto > 0 ? Math.min(105, Math.round((real / previsto) * 100)) : 0;
@@ -35,12 +39,14 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   });
 
   // ── Tarjetas ──────────────────────────────────────────────────
-  const totalTarjetasPrevUYU = tarjetas.filter(t => t.moneda === 'UYU').reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasRealUYU = tarjetas.filter(t => t.moneda === 'UYU' && t.pagado === true).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasPendUYU = tarjetas.filter(t => t.moneda === 'UYU' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasPrevUSD = tarjetas.filter(t => t.moneda === 'USD').reduce((s, t) => s + (t.monto || 0), 0);
-  const totalTarjetasPendUSD = tarjetas.filter(t => t.moneda === 'USD' && !t.pagado).reduce((s, t) => s + (t.monto || 0), 0);
-  const tarjetasPend         = tarjetas.filter(t => !t.pagado && (t.monto || 0) > 0);
+  const soloCredito = tarjetas.filter(t => t.tipo !== 'debito');
+  // Previsto propio: cuotas + cargos. Los gastos cargados ya estan previstos en su grupo.
+  const totalTarjetasPrevUYU = soloCredito.filter(t => t.moneda === 'UYU')
+    .reduce((s, t) => s + previstoPropioTarjeta(t, gastos), 0);
+  const totalTarjetasRealUYU = soloCredito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + pagadoTarjeta(t), 0);
+  const totalTarjetasPendUYU = soloCredito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + saldoTarjeta(t), 0);
+  const totalTarjetasPendUSD = soloCredito.filter(t => t.moneda === 'USD').reduce((s, t) => s + saldoTarjeta(t), 0);
+  const tarjetasPend         = soloCredito.filter(t => saldoTarjeta(t) > 0);
 
   // ── Totales (objetivo como gasto, igual que en Resumen) ──────
   const totalGastosPrev = gruposResumen.reduce((s, g) => s + g.previsto, 0) + totalTarjetasPrevUYU + objetivoAhorro;
@@ -52,7 +58,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   const pendItems = [
     ...gruposResumen.flatMap(g => g.pend),
     ...tarjetasPend.map(t => ({
-      nombre: t.nombre, previsto: t.monto, real: t.monto,
+      nombre: t.nombre, previsto: saldoTarjeta(t), real: saldoTarjeta(t),
       moneda: t.moneda, tipo: 'Tarjeta', emoji: '💳',
     })),
   ].sort((a, b) => (b.previsto || 0) - (a.previsto || 0));
@@ -109,7 +115,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
             <span className="dc-val">${fmt(totalTarjetasPendUYU)}</span>
             {totalTarjetasPendUSD > 0
               ? <span className="dc-sub">+ {fmtUSD(totalTarjetasPendUSD)}</span>
-              : <span className="dc-sub">{tarjetasPend.length} de {tarjetas.length} pendiente{tarjetasPend.length !== 1 ? 's' : ''}</span>
+              : <span className="dc-sub">{tarjetasPend.length} de {soloCredito.length} pendiente{tarjetasPend.length !== 1 ? 's' : ''}</span>
             }
           </div>
         </div>

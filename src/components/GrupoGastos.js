@@ -13,6 +13,54 @@ const fmt = (n) =>
     useGrouping: false,
   }).format(n || 0);
 
+const fmtFechaHora = () => {
+  const d = new Date();
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
+
+// Los items de gasto no tienen moneda propia (siempre UYU), asi que solo se
+// pueden cargar pagos a tarjetas en UYU.
+const tarjetasDisponibles = (tarjetas) =>
+  (tarjetas || []).filter(t => t.moneda === 'UYU' && t.id);
+
+const saldoActualDebito = (t) => {
+  const saldos = t.saldos || [];
+  return saldos.length > 0 ? saldos[saldos.length - 1].monto : (t.saldoInicial || 0);
+};
+
+// Carga un pago a una tarjeta: credito suma deuda, debito descuenta saldo.
+// Devuelve las tarjetas actualizadas y el id del movimiento generado (debito).
+function aplicarPagoTarjeta(tarjetas, tarjetaId, monto, concepto) {
+  const movId = `mov_${Date.now().toString(36)}`;
+  const nuevas = (tarjetas || []).map(t => {
+    if (t.id !== tarjetaId) return t;
+    if (t.tipo === 'debito') {
+      const entrada = {
+        id: movId,
+        ts: Date.now(),
+        fecha: fmtFechaHora(),
+        monto: saldoActualDebito(t) - monto,
+        nota: `Pago: ${concepto}`,
+        auto: true,
+      };
+      return { ...t, saldos: [...(t.saldos || []), entrada] };
+    }
+    return { ...t, monto: (t.monto || 0) + monto };
+  });
+  return { tarjetas: nuevas, movId };
+}
+
+// Revierte el efecto de un pago cargado previamente a una tarjeta.
+function revertirPagoTarjeta(tarjetas, tarjetaId, monto, movId) {
+  return (tarjetas || []).map(t => {
+    if (t.id !== tarjetaId) return t;
+    if (t.tipo === 'debito') {
+      return { ...t, saldos: (t.saldos || []).filter(s => s.id !== movId) };
+    }
+    return { ...t, monto: Math.max(0, (t.monto || 0) - monto) };
+  });
+}
+
 // Función para determinar si un período semanal es el actual
 const esPeriodoActual = (periodo, frecuencia, anio, mes) => {
   // Solo aplicar para gastos semanales
@@ -68,78 +116,137 @@ function toPeriodos(data) {
 // Modelo: { nombre, previsto, real (= previsto por defecto), pagado: false }
 // pagado:true  -> item ya pagado, real = monto pagado
 // pagado:false -> pendiente de pago, real = monto esperado
-function ItemRow({ item, onChange, onDelete }) {
+function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
+  const [eligiendo, setEligiendo] = useState(false);
+  const [seleccion, setSeleccion] = useState('');
+
   const previsto = item.previsto || 0;
   // real hereda previsto si no fue editado manualmente
   const real    = item.real !== undefined ? (item.real || 0) : previsto;
   const pagado  = item.pagado === true;
   const sinPrev = previsto === 0;
 
+  const opciones     = tarjetasDisponibles(tarjetas);
+  const tarjetaUsada = item.tarjetaId
+    ? (tarjetas || []).find(t => t.id === item.tarjetaId)
+    : null;
+
+  const iniciarPago = () => {
+    if (opciones.length === 0) { onPagar(null); return; }
+    setSeleccion('');
+    setEligiendo(true);
+  };
+
+  const confirmarPago = () => {
+    onPagar(seleccion || null);
+    setEligiendo(false);
+  };
+
   return (
-    <tr className={pagado ? 'row-pagado' : ''}>
-      <td><span className="item-nombre">{item.nombre}</span></td>
-      <td>
-        <input
-          type="number" className="cell-input" value={previsto || ''} min="0"
-          onChange={e => onChange({ ...item, previsto: parseFloat(e.target.value) || 0 })}
-          placeholder="0"
-        />
-      </td>
-      <td>
-        <input
-          type="number" className="cell-input real-input" value={real || ''} min="0"
-          onChange={e => onChange({ ...item, real: parseFloat(e.target.value) || 0 })}
-          placeholder="0"
-          disabled={pagado}
-        />
-      </td>
-      <td>
-        {!sinPrev && (
-          pagado
-            ? <button className="btn-unpagar" onClick={() => onChange({ ...item, pagado: false })}>
-                Deshacer
-              </button>
-            : <button className="btn-pagar" onClick={() => onChange({ ...item, pagado: true })}>
-                Pagar
-              </button>
-        )}
-      </td>
-      <td>
-        <button className="icon-btn-sm danger" onClick={onDelete}>
-          <Trash2 size={13} />
-        </button>
-      </td>
-    </tr>
+    <>
+      <tr className={pagado ? 'row-pagado' : ''}>
+        <td>
+          <span className="item-nombre">{item.nombre}</span>
+          {pagado && tarjetaUsada && (
+            <span className="item-tarjeta-tag">
+              {tarjetaUsada.tipo === 'debito' ? '🏧' : '💳'} {tarjetaUsada.nombre}
+            </span>
+          )}
+        </td>
+        <td>
+          <input
+            type="number" className="cell-input" value={previsto || ''} min="0"
+            onChange={e => onChange({ ...item, previsto: parseFloat(e.target.value) || 0 })}
+            placeholder="0"
+          />
+        </td>
+        <td>
+          <input
+            type="number" className="cell-input real-input" value={real || ''} min="0"
+            onChange={e => onChange({ ...item, real: parseFloat(e.target.value) || 0 })}
+            placeholder="0"
+            disabled={pagado}
+          />
+        </td>
+        <td>
+          {!sinPrev && (
+            pagado
+              ? <button className="btn-unpagar" onClick={onDespagar}>
+                  Deshacer
+                </button>
+              : <button className="btn-pagar" onClick={iniciarPago}>
+                  Pagar
+                </button>
+          )}
+        </td>
+        <td>
+          <button className="icon-btn-sm danger" onClick={onDelete}>
+            <Trash2 size={13} />
+          </button>
+        </td>
+      </tr>
+
+      {eligiendo && (
+        <tr className="pago-select-row">
+          <td colSpan={5}>
+            <div className="pago-select-wrap">
+              <span className="pago-select-label">¿Con qué pagaste ${fmt(real)}?</span>
+              <select
+                className="pago-select"
+                value={seleccion}
+                onChange={e => setSeleccion(e.target.value)}
+                autoFocus
+              >
+                <option value="">💵 Efectivo / Transferencia</option>
+                {opciones.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.tipo === 'debito'
+                      ? `🏧 ${t.nombre} — saldo $${fmt(saldoActualDebito(t))}`
+                      : `💳 ${t.nombre} — crédito`}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-confirm" onClick={confirmarPago}><Check size={14} /></button>
+              <button className="btn-cancel" onClick={() => setEligiendo(false)}><X size={14} /></button>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
 // --- Seccion de un periodo con su propia tabla e inputs ---
-function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true }) {
+function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true, mostrarPagados = true, tarjetas = [], onPagar, onDespagar, onEliminar }) {
   const [open, setOpen]       = useState(isCurrentPeriod);
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
   const [newPrev, setNewPrev]     = useState('');
 
-  const items      = periodo.items || [];
-  const conPrev    = items.filter(i => (i.previsto || 0) > 0).length;
-  const pagados    = items.filter(i => i.pagado === true).length;
-  const totalPrev  = items.reduce((s, i) => s + (i.previsto || 0), 0);
-  const totalPend  = items.filter(i => i.pagado !== true)
+  const allItems   = periodo.items || [];
+  const items      = mostrarPagados ? allItems : allItems.filter(i => i.pagado !== true);
+  const conPrev    = allItems.filter(i => (i.previsto || 0) > 0).length;
+  const pagados    = allItems.filter(i => i.pagado === true).length;
+  const totalPrev  = allItems.reduce((s, i) => s + (i.previsto || 0), 0);
+  const totalPend  = allItems.filter(i => i.pagado !== true)
                           .reduce((s, i) => s + (i.real !== undefined ? (i.real || 0) : (i.previsto || 0)), 0);
-  const totalPagado = items.filter(i => i.pagado === true)
+  const totalPagado = allItems.filter(i => i.pagado === true)
                            .reduce((s, i) => s + (i.real || 0), 0);
 
   const updateItem = (idx, item) => {
-    const n = [...items]; n[idx] = item;
+    const allItemsIdx = allItems.findIndex((_, i) => {
+      const filteredIndex = items.findIndex(filteredItem => filteredItem === allItems[i]);
+      return filteredIndex === idx;
+    });
+    const n = [...allItems]; n[allItemsIdx] = item;
     onChange({ ...periodo, items: n });
   };
-  const deleteItem = (idx) => onChange({ ...periodo, items: items.filter((_, i) => i !== idx) });
 
   const addItem = () => {
     if (!newNombre.trim()) return;
     const prev = parseFloat(newPrev) || 0;
     const it = { nombre: newNombre.trim(), previsto: prev, real: prev, pagado: false };
-    onChange({ ...periodo, items: [...items, it] });
+    onChange({ ...periodo, items: [...allItems, it] });
     setNewNombre(''); setNewPrev(''); setShowAdd(false);
   };
 
@@ -210,8 +317,11 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true 
                 <ItemRow
                   key={idx}
                   item={item}
+                  tarjetas={tarjetas}
                   onChange={updated => updateItem(idx, updated)}
-                  onDelete={() => deleteItem(idx)}
+                  onDelete={() => onEliminar(allItems.indexOf(item))}
+                  onPagar={tarjetaId => onPagar(allItems.indexOf(item), tarjetaId)}
+                  onDespagar={() => onDespagar(allItems.indexOf(item))}
                 />
               ))}
             </tbody>
@@ -254,13 +364,84 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true 
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange, anio, mes }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [] }) {
+  const [mostrarPagados, setMostrarPagados] = useState(true);
   const periodos    = toPeriodos(data || []);
   const showHeaders = periodos.length > 1;
 
   const updatePeriodo = (idx, periodo) => {
     const n = [...periodos]; n[idx] = periodo;
     onChange(n);
+  };
+
+  const setItem = (periodoIdx, itemIdx, nuevoItem) =>
+    periodos.map((p, i) => i === periodoIdx
+      ? { ...p, items: (p.items || []).map((it, j) => j === itemIdx ? nuevoItem : it) }
+      : p);
+
+  // Marcar pagado. Si se eligio tarjeta, el gasto y la tarjeta se actualizan
+  // juntos para que el guardado quede consistente.
+  const pagarItem = (periodoIdx, itemIdx, tarjetaId) => {
+    const item  = (periodos[periodoIdx]?.items || [])[itemIdx];
+    if (!item) return;
+    const monto = item.real !== undefined ? (item.real || 0) : (item.previsto || 0);
+
+    let nuevasTarjetas = null;
+    let pagado = { ...item, pagado: true, real: monto };
+
+    if (tarjetaId) {
+      const res = aplicarPagoTarjeta(tarjetas, tarjetaId, monto, item.nombre);
+      nuevasTarjetas = res.tarjetas;
+      const esDebito = (tarjetas || []).find(t => t.id === tarjetaId)?.tipo === 'debito';
+      pagado = {
+        ...pagado,
+        tarjetaId,
+        tarjetaMonto: monto,
+        ...(esDebito ? { tarjetaMovId: res.movId } : {}),
+      };
+    }
+
+    onChange(setItem(periodoIdx, itemIdx, pagado), nuevasTarjetas);
+  };
+
+  const despagarItem = (periodoIdx, itemIdx) => {
+    const item = (periodos[periodoIdx]?.items || [])[itemIdx];
+    if (!item) return;
+
+    let nuevasTarjetas = null;
+    if (item.tarjetaId) {
+      nuevasTarjetas = revertirPagoTarjeta(
+        tarjetas,
+        item.tarjetaId,
+        item.tarjetaMonto !== undefined ? item.tarjetaMonto : (item.real || 0),
+        item.tarjetaMovId,
+      );
+    }
+
+    // Se quitan las claves de tarjeta (RTDB rechaza undefined)
+    const { tarjetaId, tarjetaMonto, tarjetaMovId, ...limpio } = item;
+    onChange(setItem(periodoIdx, itemIdx, { ...limpio, pagado: false }), nuevasTarjetas);
+  };
+
+  // Borrar un item pagado con tarjeta tiene que devolver el cargo a la tarjeta
+  const eliminarItem = (periodoIdx, itemIdx) => {
+    const item = (periodos[periodoIdx]?.items || [])[itemIdx];
+    if (!item) return;
+
+    let nuevasTarjetas = null;
+    if (item.pagado === true && item.tarjetaId) {
+      nuevasTarjetas = revertirPagoTarjeta(
+        tarjetas,
+        item.tarjetaId,
+        item.tarjetaMonto !== undefined ? item.tarjetaMonto : (item.real || 0),
+        item.tarjetaMovId,
+      );
+    }
+
+    const nuevosPeriodos = periodos.map((p, i) => i === periodoIdx
+      ? { ...p, items: (p.items || []).filter((_, j) => j !== itemIdx) }
+      : p);
+    onChange(nuevosPeriodos, nuevasTarjetas);
   };
 
   // Totales globales (suma de todos los periodos)
@@ -288,6 +469,14 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes }) {
           )}
         </h2>
         <div className="section-header-right">
+          <label className="checkbox-filter">
+            <input 
+              type="checkbox" 
+              checked={mostrarPagados}
+              onChange={(e) => setMostrarPagados(e.target.checked)}
+            />
+            <span>Mostrar pagados</span>
+          </label>
           <span className="progress-txt">{pagados}/{conPrev} pagados</span>
         </div>
       </div>
@@ -318,6 +507,11 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes }) {
             showHeader={showHeaders}
             onChange={updated => updatePeriodo(idx, updated)}
             isCurrentPeriod={isCurrentPeriod}
+            mostrarPagados={mostrarPagados}
+            tarjetas={tarjetas}
+            onPagar={(itemIdx, tarjetaId) => pagarItem(idx, itemIdx, tarjetaId)}
+            onDespagar={itemIdx => despagarItem(idx, itemIdx)}
+            onEliminar={itemIdx => eliminarItem(idx, itemIdx)}
           />
         );
       })}
