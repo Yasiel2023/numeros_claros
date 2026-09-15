@@ -24,6 +24,7 @@ import OnboardingWizard from './components/OnboardingWizard';
 import Config from './components/Config';
 import FotoComprobante from './components/FotoComprobante';
 import AplicarDesglose from './components/AplicarDesglose';
+import Chat from './components/Chat';
 import './App.css';
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
@@ -121,6 +122,7 @@ const NAV_FIJOS_FIN = [
   { key: 'tarjetas',   label: 'Tarjetas',        icon: CreditCard, emoji: '💳' },
   { key: 'resumen',    label: 'Resumen',          icon: BarChart2,  emoji: '📊' },
   { key: 'caja',       label: 'Caja de Ahorro',  icon: PiggyBank,  emoji: '🐷' },
+  { key: 'chat',       label: 'Preguntas IA',    icon: BarChart2,  emoji: '💬' },
   { key: 'plantillas', label: 'Plantillas',       icon: Settings,   emoji: '⚙️' },
   { key: 'config',     label: 'Configuración',    icon: Settings,   emoji: '⚙️' },
 ];
@@ -962,6 +964,21 @@ function AppInterna() {
                     )}
                   </div>
                   <Resumen mesData={mesData} onChange={updateMesData} grupos={grupos} />
+                </div>
+              )}
+              {vista === 'chat' && (
+                <div className="page">
+                  <div className="page-header"><h1 className="page-title">💬 Preguntas sobre tu presupuesto</h1></div>
+                  <div className="section-block">
+                    <Chat
+                      apiKey={geminiApiKey}
+                      presupuestos={presupuestos}
+                      mesDataByMonth={{ [`${año}_${mes}`]: mesData }}
+                      defaults={defaults}
+                      año={año}
+                      mes={mes}
+                    />
+                  </div>
                 </div>
               )}
               {vista === 'config' && (
