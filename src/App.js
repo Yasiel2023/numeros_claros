@@ -173,7 +173,7 @@ function AppInterna() {
   // ── API Key de Gemini ─────────────────────────────────
   const [groqApiKey, setGroqApiKey] = useState('');
   const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
-  const [groqModel, setGroqModel] = useState('llama-3.2-90b-vision-preview');
+  const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
   // ── Flujo de foto + desglose ──────────────────────────
   const [showFotoModal, setShowFotoModal] = useState(false);
   const [desglosing, setDesglosing] = useState(false);
