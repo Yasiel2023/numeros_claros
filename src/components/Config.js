@@ -7,7 +7,7 @@ import { ref, set, get } from 'firebase/database';
 export default function Config({ uid, admins = {} }) {
   const [apiKey, setLocalApiKey] = useState('');
   const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
-  const [groqModel, setGroqModel] = useState('llama-3.1-70b-versatile');
+  const [groqModel, setGroqModel] = useState('llama-3.2-90b-vision-preview');
   const [showKey, setShowKey] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -166,7 +166,7 @@ export default function Config({ uid, admins = {} }) {
               placeholder="llama-3.1-70b-versatile"
               onChange={(e) => { setGroqModel(e.target.value); setError(''); }}
             />
-            <p className="config-hint">Modelos disponibles: llama-3.1-70b-versatile, llama-3.1-8b-instant, mixtral-8x7b-32768</p>
+            <p className="config-hint">Modelos disponibles: llama-3.2-90b-vision-preview, llama-3.2-11b-vision-preview, llama-3.1-8b-instant</p>
           </div>
 
           <div className="config-actions">
