@@ -28,6 +28,13 @@ invitaciones/
   {uid}/
     {presupuestoId}   { presupuestoId, ownerUid, ownerEmail, presupuestoNombre, estado: 'pendiente'|'aceptada'|'rechazada', enviadaEn }
 
+admins/
+  {uid}                 true          ← UID de usuarios que tienen acceso a Configuración
+
+config/
+  {uid}/
+    gemini_api_key      string        ← API key para Gemini Vision (se guarda en `config/{uid}/gemini_api_key`)
+
 email_uid/
   {emailCodificado}   → uid          (codificado: '.' reemplazado por ',', ver encodeEmail())
 
