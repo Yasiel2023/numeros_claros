@@ -23,34 +23,37 @@ export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesData
     setError('');
 
     try {
-      // Construir contexto JSON completo del presupuesto
-      const contexto = {
-        presupuesto: presupuestoSelec,
-        configuracion: {
-          grupos_gastos: (defaults?.grupos_gastos || []).map(g => ({
-            id: g.id,
-            nombre: g.nombre,
-            icono: g.icono,
-            frecuencia: g.frecuencia,
-            items_plantilla: g.items
-          })),
-          ingresos_plantilla: defaults?.ingresos || []
-        },
-        meses: {}
-      };
+      // Construir contexto optimizado (solo datos relevantes, no JSON completo)
+      const mesActualKey = `${año}_${mes}`;
+      const mesActual = mesDataByMonth[mesActualKey];
 
-      // Agregar todos los meses disponibles
-      Object.keys(mesDataByMonth).forEach(mesKey => {
-        const data = mesDataByMonth[mesKey];
-        if (!data) return;
+      // Resumen simple en lugar de JSON completo
+      const resumenGastos = {};
+      if (mesActual?.gastos) {
+        Object.keys(mesActual.gastos).forEach(grupoId => {
+          const grupo = defaults?.grupos_gastos?.find(g => g.id === grupoId);
+          const periodos = mesActual.gastos[grupoId] || [];
+          const totalReal = periodos.reduce((sum, p) => {
+            const itemsReales = (p.items || []).reduce((s, it) => s + (it.real || 0), 0);
+            return sum + itemsReales;
+          }, 0);
+          if (grupo) {
+            resumenGastos[grupo.nombre] = totalReal;
+          }
+        });
+      }
 
-        contexto.meses[mesKey] = {
-          ingresos: data.ingresos || [],
-          gastos: data.gastos || {},
-          tarjetas: data.tarjetas || [],
-          objetivoAhorro: data.objetivoAhorro || 0
-        };
-      });
+      const contexto = `Presupuesto: ${presupuestoSelec}
+Mes: ${año}-${String(mes + 1).padStart(2, '0')}
+
+INGRESOS: $${(mesActual?.ingresos || []).reduce((s, i) => s + (i.real || 0), 0)}
+
+GASTOS POR CATEGORÍA:
+${Object.entries(resumenGastos).map(([cat, val]) => `- ${cat}: $${val}`).join('\n')}
+
+OBJETIVO DE AHORRO: $${mesActual?.objetivoAhorro || 0}
+
+Datos disponibles: Presupuesto de ${año}`;
 
       // Hacer request a Groq (API compatible con OpenAI)
       const response = await fetch(
@@ -66,14 +69,13 @@ export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesData
             messages: [
               {
                 role: 'system',
-                content: 'Eres un asistente financiero experto especializado en presupuestos personales. Responde de manera clara, concisa y útil. Analiza los datos, haz comparativas entre meses si es relevante, e incluye recomendaciones cuando sea apropiado.'
+                content: 'Eres un asistente financiero experto especializado en presupuestos personales. Responde de manera clara, concisa y útil.'
               },
               {
                 role: 'user',
-                content: `CONTEXTO COMPLETO DEL PRESUPUESTO EN JSON:
-${JSON.stringify(contexto, null, 2)}
+                content: `${contexto}
 
-PREGUNTA:
+PREGUNTA DEL USUARIO:
 ${pregunta}`
               }
             ],
