@@ -83,6 +83,7 @@ ${Object.entries(resumenGastos).map(([cat, val]) => `- ${cat}: $${val}`).join('\
 OBJETIVO DE AHORRO: $${mesActual?.objetivoAhorro || 0}
 
 Datos disponibles: Presupuesto de ${año}`;
+      }
 
       // Hacer request a Groq (API compatible con OpenAI)
       const response = await fetch(
