@@ -2,7 +2,7 @@
 // Integración con Google Gemini Vision API
 // La API key se pasa en cada request; se guarda en localStorage del navegador.
 
-const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent';
+const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro-vision:generateContent';
 
 export async function desglosarComprobante(imageBase64, apiKey) {
   if (!apiKey) throw new Error('API key de Gemini no configurada');
