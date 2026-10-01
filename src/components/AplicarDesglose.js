@@ -152,7 +152,32 @@ export default function AplicarDesglose({
         monto: montos[idx],
       });
     });
-    onAplicar(lista, tarjetaId);
+
+    // Registro del ticket tal como se aplicó (se guarda en el mes)
+    const comprobante = {
+      tienda: desglose.tienda || '',
+      observaciones: desglose.observaciones || '',
+      totalItems: sumaItems,
+      totalPagado: hayDescuento ? totalPagado : sumaItems,
+      descuentoRepartido: hayDescuento && repartirDescuento,
+      items: desglose.items.map((item, idx) => {
+        const a = asign[idx] || {};
+        return {
+          nombre: item.nombre,
+          cantidad: item.cantidad ?? 1,
+          precioUnitario: item.precio_unitario ?? null,
+          total: item.total || 0,
+          monto: montos[idx],
+          destino: a.destino === IGNORAR ? 'ignorado' : a.destino === NUEVO ? 'nuevo' : 'existente',
+          grupoId: a.destino === IGNORAR ? null : (a.grupoId || null),
+          periodoNumero: a.destino === IGNORAR ? null : (a.periodoNumero ?? null),
+          gasto: a.destino === IGNORAR ? null : a.destino === NUEVO ? item.nombre : a.destino,
+          sugeridoIA: !!a.sugerido && a.destino === a.sugerido,
+        };
+      }),
+    };
+
+    onAplicar(lista, tarjetaId, comprobante);
   };
 
   const listos = desglose.items.filter((_, idx) => asign[idx]?.destino && !asign[idx].cargando).length;

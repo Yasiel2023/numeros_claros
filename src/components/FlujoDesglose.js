@@ -10,7 +10,7 @@ export default function FlujoDesglose({
   grupos,
   año,
   mes,
-  onAplicar,  // (asignaciones, tarjetaId) => void
+  onAplicar,  // (asignaciones, tarjetaId, comprobante) => void
   onClose,
 }) {
   const [paso, setPaso] = useState('foto'); // 'foto' | 'desglose'
@@ -21,8 +21,8 @@ export default function FlujoDesglose({
     setPaso('desglose');
   };
 
-  const handleAplicar = (asignaciones, tarjetaId) => {
-    onAplicar(asignaciones, tarjetaId);
+  const handleAplicar = (asignaciones, tarjetaId, comprobante) => {
+    onAplicar(asignaciones, tarjetaId, comprobante);
     onClose();
   };
 

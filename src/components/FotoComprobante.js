@@ -1,56 +1,33 @@
 // src/components/FotoComprobante.js
 import React, { useRef, useState } from 'react';
-import { Camera, Trash2, AlertCircle, Loader } from 'lucide-react';
+import { Camera, Trash2, AlertCircle, Loader, Image as ImageIcon } from 'lucide-react';
 import { desglosarComprobante } from '../ia';
 
 const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 export default function FotoComprobante({ ia, onDesglose, loading: externalLoading }) {
-  const cameraRef = useRef(null);
-  const canvasRef = useRef(null);
-  const fileInputRef = useRef(null);
+  const camaraInputRef  = useRef(null);
+  const galeriaInputRef = useRef(null);
   const [photo, setPhoto] = useState(null);
-  const [mode, setMode] = useState(null); // 'camara' | 'paste' | null
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // ── Capturar foto con cámara ──────────────────────────────────
-  const abrirCamara = async () => {
-    try {
-      setError('');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
-        audio: false,
-      });
-      setMode('camara');
-      cameraRef.current.srcObject = stream;
-    } catch (e) {
-      setError(`No se pudo acceder a la cámara: ${e.message}`);
+  // ── Sacar foto / elegir de la galería ─────────────────────────
+  // Se usa la cámara nativa del dispositivo (input con capture): en el celular
+  // tiene enfoque automático, flash y resolución completa, mejor para tickets.
+  const leerArchivo = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('El archivo elegido no es una imagen.');
+      return;
     }
-  };
-
-  const tomarFoto = () => {
-    const ctx = canvasRef.current.getContext('2d');
-    const video = cameraRef.current;
-    canvasRef.current.width = video.videoWidth;
-    canvasRef.current.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0);
-
-    const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.9);
-    setPhoto(dataUrl);
-
-    // Cerrar cámara
-    if (video.srcObject) {
-      video.srcObject.getTracks().forEach(t => t.stop());
-    }
-    setMode(null);
-  };
-
-  const cerrarCamara = () => {
-    if (cameraRef.current?.srcObject) {
-      cameraRef.current.srcObject.getTracks().forEach(t => t.stop());
-    }
-    setMode(null);
+    setError('');
+    const reader = new FileReader();
+    reader.onload = (ev) => setPhoto(ev.target.result);
+    reader.onerror = () => setError('No se pudo leer la imagen.');
+    reader.readAsDataURL(file);
   };
 
   // ── Pegar desde portapapeles ──────────────────────────────────
@@ -96,28 +73,7 @@ export default function FotoComprobante({ ia, onDesglose, loading: externalLoadi
     setError('');
   };
 
-  // ── UI: Captura de cámara ─────────────────────────────────────
-  if (mode === 'camara') {
-    return (
-      <div className="foto-camara-modal">
-        <div className="foto-camara-container">
-          <video ref={cameraRef} autoPlay playsInline className="foto-video" />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-          <div className="foto-camara-controls">
-            <button className="btn-large" onClick={tomarFoto}>
-              📷 Tomar foto
-            </button>
-            <button className="btn-cancel" onClick={cerrarCamara}>
-              Cerrar cámara
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── UI: Principal ─────────────────────────────────────────────
+  // ── UI ────────────────────────────────────────────────────────
   return (
     <div className="foto-container">
       {error && (
@@ -126,11 +82,24 @@ export default function FotoComprobante({ ia, onDesglose, loading: externalLoadi
         </div>
       )}
 
+      <input
+        ref={camaraInputRef} type="file" accept="image/*" capture="environment"
+        onChange={leerArchivo} style={{ display: 'none' }}
+      />
+      <input
+        ref={galeriaInputRef} type="file" accept="image/*"
+        onChange={leerArchivo} style={{ display: 'none' }}
+      />
+
       {!photo ? (
         <div className="foto-opciones">
-          <button className="btn-foto-option" onClick={abrirCamara}>
+          <button className="btn-foto-option" onClick={() => camaraInputRef.current?.click()}>
             <Camera size={24} />
             <span>Sacar foto</span>
+          </button>
+          <button className="btn-foto-option" onClick={() => galeriaInputRef.current?.click()}>
+            <ImageIcon size={24} />
+            <span>Elegir de la galería</span>
           </button>
           <button className="btn-foto-option" onClick={pegarDesdePortapapeles}>
             <span className="text-2xl">📋</span>

@@ -23,6 +23,7 @@ import NuevoMesModal from './components/NuevoMesModal';
 import OnboardingWizard from './components/OnboardingWizard';
 import Config from './components/Config';
 import FlujoDesglose from './components/FlujoDesglose';
+import Comprobantes from './components/Comprobantes';
 import Chat from './components/Chat';
 import './App.css';
 
@@ -66,6 +67,7 @@ function normalizeMesData(raw) {
     ingresos: toArray(raw.ingresos || []),
     gastos,
     semanas:  toArray(raw.semanas  || []).map(s => ({ ...s, items: toArray(s.items || []) })),
+    comprobantes: toArray(raw.comprobantes || []).map(c => ({ ...c, items: toArray(c.items || []) })),
     // Las tarjetas necesitan id para poder vincularles pagos de gastos.
     // Las creadas antes de esa funcionalidad no lo tienen: se les asigna aca.
     tarjetas: toArray(raw.tarjetas || []).map((t, i) => ({
@@ -124,6 +126,7 @@ const NAV_FIJOS_INICIO = [
 ];
 const NAV_FIJOS_FIN = [
   { key: 'tarjetas',   label: 'Tarjetas',        icon: CreditCard, emoji: '💳' },
+  { key: 'comprobantes', label: 'Comprobantes',  icon: Receipt,    emoji: '🧾' },
   { key: 'resumen',    label: 'Resumen',          icon: BarChart2,  emoji: '📊' },
   { key: 'caja',       label: 'Caja de Ahorro',  icon: PiggyBank,  emoji: '🐷' },
   { key: 'chat',       label: 'Preguntas IA',    icon: BarChart2,  emoji: '💬' },
@@ -546,8 +549,8 @@ function AppInterna() {
   // asignaciones: [{tipo: 'matchear'|'crear', grupoId, periodoNumero, itemName, nombre, monto}]
   // tarjetaId: tarjeta con la que se pagó ('' = efectivo). Cada item queda vinculado
   // a la tarjeta igual que al pagar un gasto a mano, para poder revertirlo después.
-  const aplicarComprobante = useCallback((asignaciones, tarjetaId = '') => {
-    if (!mesData || !asignaciones.length) return;
+  const aplicarComprobante = useCallback((asignaciones, tarjetaId = '', comprobante = null) => {
+    if (!mesData || (!asignaciones.length && !comprobante)) return;
     const gastos = { ...(mesData.gastos || {}) };
     let tarjetas = mesData.tarjetas || [];
     const esDebito = tarjetas.find(t => t.id === tarjetaId)?.tipo === 'debito';
@@ -586,7 +589,21 @@ function AppInterna() {
       });
     });
 
-    updateMesData({ ...mesData, gastos, tarjetas });
+    // Registro del ticket aplicado. JSON.parse/stringify quita los undefined (RTDB los rechaza).
+    let comprobantes = mesData.comprobantes || [];
+    if (comprobante) {
+      const tarjeta = (mesData.tarjetas || []).find(t => t.id === tarjetaId);
+      comprobantes = [...comprobantes, JSON.parse(JSON.stringify({
+        ...comprobante,
+        id: `cp_${base36}`,
+        fecha: new Date().toISOString(),
+        tarjetaId: tarjetaId || null,
+        tarjetaNombre: tarjeta ? tarjeta.nombre : null,
+        tarjetaTipo: tarjeta ? (tarjeta.tipo === 'debito' ? 'debito' : 'credito') : null,
+      }))];
+    }
+
+    updateMesData({ ...mesData, gastos, tarjetas, comprobantes });
   }, [mesData, updateMesData]);
 
   // ── Tarjetas del último mes anterior que tenga alguna (hasta 12 meses atrás) ──
@@ -1054,6 +1071,19 @@ function AppInterna() {
                     onImportarTarjetasPrevias={importarTarjetasPrevias}
                     anio={año}
                     mes={mes}
+                  />
+                </div>
+              )}
+              {vista === 'comprobantes' && (
+                <div className="page">
+                  <div className="page-header"><h1 className="page-title">🧾 Comprobantes — {MESES_ES[mes]} {año}</h1></div>
+                  <Comprobantes
+                    data={mesData?.comprobantes || []}
+                    grupos={grupos}
+                    onEliminar={id => updateMesData({
+                      ...mesData,
+                      comprobantes: (mesData?.comprobantes || []).filter(c => c.id !== id),
+                    })}
                   />
                 </div>
               )}

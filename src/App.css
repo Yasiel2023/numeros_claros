@@ -551,7 +551,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
 /* ── FotoComprobante ─────────────────────────────────────────── */
 .foto-container { display: flex; flex-direction: column; gap: 16px; padding: 20px 0; }
-.foto-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.foto-opciones { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
 .btn-foto-option {
   display: flex; flex-direction: column; align-items: center; gap: 8px;
   padding: 24px 16px; border: 2px dashed var(--border);
@@ -794,6 +794,32 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ps-item.orange strong { color: var(--orange); }
 .ps-item.teal strong { color: var(--teal); }
 .ps-item.green strong { color: var(--green); }
+
+/* ── Comprobantes ─────────────────────────────────────────────– */
+.comp-vacio { color: var(--text2); font-size: 14px; }
+.comp-card { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; background: var(--surface); }
+.comp-card-header { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; background: none; border: none; cursor: pointer; text-align: left; font-family: var(--font); color: var(--text); }
+.comp-card-header:hover { background: var(--bg); }
+.comp-card-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.comp-tienda { font-weight: 700; font-size: 14px; }
+.comp-meta { font-size: 12px; color: var(--text3); }
+.comp-total { font-family: var(--mono); font-size: 15px; white-space: nowrap; }
+.comp-card-body { border-top: 1px solid var(--border2); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.comp-table-wrap { overflow-x: auto; }
+.comp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.comp-table th { text-align: left; font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; padding: 4px 6px; border-bottom: 1px solid var(--border2); }
+.comp-table td { padding: 6px; border-bottom: 1px solid var(--border2); vertical-align: top; }
+.comp-table .num { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.comp-ignorado td { color: var(--text3); text-decoration: line-through; }
+.comp-original { text-decoration: line-through; color: var(--text3); font-size: 11px; margin-right: 4px; }
+.comp-tag { margin-left: 6px; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 20px; background: var(--teal-l); color: var(--teal); }
+.comp-tag.ia { background: #ede9fe; color: #6d28d9; }
+.comp-detalle { font-size: 12px; color: var(--text2); display: flex; flex-direction: column; gap: 4px; }
+.comp-obs { font-style: italic; }
+.comp-acciones { display: flex; justify-content: flex-end; }
+.comp-acciones .btn-sm-outline { display: inline-flex; align-items: center; gap: 4px; }
+.comp-confirmar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+.btn-sm-outline.danger { border-color: var(--red); color: var(--red); }
 
 /* ── Modo carrito ─────────────────────────────────────────────– */
 .carrito-toggle { padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px; transition: all .12s; }
