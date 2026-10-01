@@ -3,9 +3,8 @@
 // Frecuencias: mensual (1 periodo) | quincenal (2) | cada10dias (3) | semanal (N semanas)
 // La data llega como array de periodos: [{numero, label, items:[]}]
 // Compatibilidad atras: si llegan items planos se envuelven en un unico periodo.
-import React, { useState } from 'react';
-import { Plus, Trash2, Check, X, ChevronDown, ChevronUp, Camera } from 'lucide-react';
-import FlujoDesglose from './FlujoDesglose';
+import React, { useState, useEffect } from 'react';
+import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 
 const fmt = (n) =>
   new Intl.NumberFormat('es-UY', {
@@ -21,18 +20,18 @@ const fmtFechaHora = () => {
 
 // Los items de gasto no tienen moneda propia (siempre UYU), asi que solo se
 // pueden cargar pagos a tarjetas en UYU.
-const tarjetasDisponibles = (tarjetas) =>
+export const tarjetasDisponibles = (tarjetas) =>
   (tarjetas || []).filter(t => t.moneda === 'UYU' && t.id);
 
-const saldoActualDebito = (t) => {
+export const saldoActualDebito = (t) => {
   const saldos = t.saldos || [];
   return saldos.length > 0 ? saldos[saldos.length - 1].monto : (t.saldoInicial || 0);
 };
 
 // Carga un pago a una tarjeta: credito suma deuda, debito descuenta saldo.
 // Devuelve las tarjetas actualizadas y el id del movimiento generado (debito).
-function aplicarPagoTarjeta(tarjetas, tarjetaId, monto, concepto) {
-  const movId = `mov_${Date.now().toString(36)}`;
+// movId se puede pasar para generar varios movimientos en el mismo milisegundo.
+export function aplicarPagoTarjeta(tarjetas, tarjetaId, monto, concepto, movId = `mov_${Date.now().toString(36)}`) {
   const nuevas = (tarjetas || []).map(t => {
     if (t.id !== tarjetaId) return t;
     if (t.tipo === 'debito') {
@@ -104,7 +103,7 @@ function isPeriodoArray(arr) {
 }
 
 // Normaliza data a array de periodos siempre
-function toPeriodos(data) {
+export function toPeriodos(data) {
   if (!data || !Array.isArray(data) || data.length === 0) {
     return [{ numero: 1, label: 'Mes', items: [] }];
   }
@@ -117,7 +116,9 @@ function toPeriodos(data) {
 // Modelo: { nombre, previsto, real (= previsto por defecto), pagado: false }
 // pagado:true  -> item ya pagado, real = monto pagado
 // pagado:false -> pendiente de pago, real = monto esperado
-function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
+// enCarrito:true -> modo carrito: el item ya está en el carrito del súper pero
+// todavía no se pagó (se paga después, normalmente con el ticket).
+function ItemRow({ item, tarjetas, modoCarrito, onChange, onDelete, onPagar, onDespagar }) {
   const [eligiendo, setEligiendo] = useState(false);
   const [seleccion, setSeleccion] = useState('');
 
@@ -126,6 +127,14 @@ function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
   const real    = item.real !== undefined ? (item.real || 0) : previsto;
   const pagado  = item.pagado === true;
   const sinPrev = previsto === 0;
+  const enCarrito = !pagado && item.enCarrito === true;
+
+  const montar = () => onChange({ ...item, enCarrito: true });
+  const sacar  = () => {
+    // RTDB rechaza undefined: se quita la clave
+    const { enCarrito: _ec, ...resto } = item;
+    onChange(resto);
+  };
 
   const opciones     = tarjetasDisponibles(tarjetas);
   const tarjetaUsada = item.tarjetaId
@@ -145,9 +154,10 @@ function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
 
   return (
     <>
-      <tr className={pagado ? 'row-pagado' : ''}>
+      <tr className={pagado ? 'row-pagado' : enCarrito ? 'row-carrito' : ''}>
         <td>
           <span className="item-nombre">{item.nombre}</span>
+          {enCarrito && <span className="item-carrito-tag">🛒 en carrito</span>}
           {pagado && tarjetaUsada && (
             <span className="item-tarjeta-tag">
               {tarjetaUsada.tipo === 'debito' ? '🏧' : '💳'} {tarjetaUsada.nombre}
@@ -170,14 +180,14 @@ function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
           />
         </td>
         <td>
-          {!sinPrev && (
-            pagado
-              ? <button className="btn-unpagar" onClick={onDespagar}>
-                  Deshacer
-                </button>
-              : <button className="btn-pagar" onClick={iniciarPago}>
-                  Pagar
-                </button>
+          {pagado ? (
+            !sinPrev && <button className="btn-unpagar" onClick={onDespagar}>Deshacer</button>
+          ) : modoCarrito ? (
+            enCarrito
+              ? <button className="btn-unpagar" onClick={sacar} title="Sacar del carrito">Sacar</button>
+              : <button className="btn-montar" onClick={montar} title="Subir al carrito">Montar</button>
+          ) : (
+            !sinPrev && <button className="btn-pagar" onClick={iniciarPago}>Pagar</button>
           )}
         </td>
         <td>
@@ -218,7 +228,7 @@ function ItemRow({ item, tarjetas, onChange, onDelete, onPagar, onDespagar }) {
 }
 
 // --- Seccion de un periodo con su propia tabla e inputs ---
-function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true, mostrarPagados = true, tarjetas = [], onPagar, onDespagar, onEliminar }) {
+function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true, mostrarPagados = true, modoCarrito = false, tarjetas = [], onPagar, onDespagar, onEliminar }) {
   const [open, setOpen]       = useState(isCurrentPeriod);
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
@@ -233,6 +243,8 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
                           .reduce((s, i) => s + (i.real !== undefined ? (i.real || 0) : (i.previsto || 0)), 0);
   const totalPagado = allItems.filter(i => i.pagado === true)
                            .reduce((s, i) => s + (i.real || 0), 0);
+  const pendientes  = allItems.filter(i => i.pagado !== true);
+  const enCarrito   = pendientes.filter(i => i.enCarrito === true).length;
 
   const updateItem = (idx, item) => {
     const allItemsIdx = allItems.findIndex((_, i) => {
@@ -258,6 +270,7 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
           <span className="periodo-header-dot" />
           <span className="periodo-label">{periodo.label}</span>
           <span className="periodo-stats">
+            {modoCarrito && pendientes.length > 0 && <>🛒 {enCarrito}/{pendientes.length} &middot; </>}
             {pagados}/{conPrev} pagados &middot; prev ${fmt(totalPrev)} &middot; pend ${fmt(totalPend)} &middot; pagado ${fmt(totalPagado)}
           </span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -319,6 +332,7 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
                   key={idx}
                   item={item}
                   tarjetas={tarjetas}
+                  modoCarrito={modoCarrito}
                   onChange={updated => updateItem(idx, updated)}
                   onDelete={() => onEliminar(allItems.indexOf(item))}
                   onPagar={tarjetaId => onPagar(allItems.indexOf(item), tarjetaId)}
@@ -365,9 +379,22 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [], apiKey = '', mesData = null, grupos = [] }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [] }) {
   const [mostrarPagados, setMostrarPagados] = useState(true);
-  const [showFlujoDesglose, setShowFlujoDesglose] = useState(false);
+
+  // Modo carrito: preferencia de este navegador, recordada por categoría
+  const claveCarrito = `modoCarrito_${grupo?.id}`;
+  const [modoCarrito, setModoCarritoState] = useState(() => {
+    try { return localStorage.getItem(claveCarrito) === '1'; } catch (e) { return false; }
+  });
+  useEffect(() => {
+    try { setModoCarritoState(localStorage.getItem(claveCarrito) === '1'); } catch (e) { /* sin storage */ }
+  }, [claveCarrito]);
+  const setModoCarrito = (v) => {
+    setModoCarritoState(v);
+    try { localStorage.setItem(claveCarrito, v ? '1' : '0'); } catch (e) { /* sin storage */ }
+  };
+
   const periodos    = toPeriodos(data || []);
   const showHeaders = periodos.length > 1;
 
@@ -389,7 +416,9 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
     const monto = item.real !== undefined ? (item.real || 0) : (item.previsto || 0);
 
     let nuevasTarjetas = null;
-    let pagado = { ...item, pagado: true, real: monto };
+    // Al pagarse sale del carrito
+    const { enCarrito: _ec, ...sinCarrito } = item;
+    let pagado = { ...sinCarrito, pagado: true, real: monto };
 
     if (tarjetaId) {
       const res = aplicarPagoTarjeta(tarjetas, tarjetaId, monto, item.nombre);
@@ -446,45 +475,6 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
     onChange(nuevosPeriodos, nuevasTarjetas);
   };
 
-  // Aplicar desglose de comprobante
-  const aplicarDesglose = (itemsAplicados, itemsNuevos, periodoNumero) => {
-    // itemsAplicados: [{grupoId, periodoNumero, itemName, nuevoMonto}]
-    // itemsNuevos: [{nombre, grupoId, previsto}]
-
-    const nuevosPeriodos = periodos.map(p => {
-      if (p.numero !== periodoNumero) return p;
-
-      let items = [...(p.items || [])];
-
-      // Actualizar items existentes (solo si este grupo está en los aplicados)
-      itemsAplicados.forEach(aplicado => {
-        if (aplicado.grupoId !== grupo.id) return;
-        const existente = items.find(i => i.nombre === aplicado.itemName);
-        if (existente) {
-          existente.real = (existente.real || 0) + aplicado.nuevoMonto;
-          existente.pagado = true;
-        }
-      });
-
-      // Agregar nuevos items que corresponden a este grupo
-      itemsNuevos.forEach(nuevo => {
-        if (nuevo.grupoId === grupo.id) {
-          items.push({
-            nombre: nuevo.nombre,
-            previsto: nuevo.previsto,
-            real: nuevo.previsto,
-            pagado: true,
-          });
-        }
-      });
-
-      return { ...p, items };
-    });
-
-    onChange(nuevosPeriodos);
-    setShowFlujoDesglose(false);
-  };
-
   // Totales globales (suma de todos los periodos)
   const totalPrev  = periodos.reduce((s, p) =>
     s + (p.items || []).reduce((ss, i) => ss + (i.previsto || 0), 0), 0);
@@ -499,6 +489,18 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
   const pagados    = periodos.reduce((s, p) =>
     s + (p.items || []).filter(i => i.pagado === true).length, 0);
 
+  // Carrito: pendientes ya montados vs. los que faltan montar
+  const montoPend = (i) => (i.real !== undefined ? (i.real || 0) : (i.previsto || 0));
+  const pendientesTodos = periodos.flatMap(p => (p.items || []).filter(i => i.pagado !== true));
+  const enCarrito  = pendientesTodos.filter(i => i.enCarrito === true);
+  const faltan     = pendientesTodos.filter(i => i.enCarrito !== true);
+
+  const vaciarCarrito = () =>
+    onChange(periodos.map(p => ({
+      ...p,
+      items: (p.items || []).map(({ enCarrito: _ec, ...resto }) => resto),
+    })));
+
   return (
     <div className="section-block">
       {/* Cabecera del grupo */}
@@ -510,15 +512,14 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
           )}
         </h2>
         <div className="section-header-right">
-          {apiKey && (
-            <button
-              className="add-row-btn"
-              onClick={() => setShowFlujoDesglose(true)}
-              title="Capturar comprobante con la cámara"
-            >
-              <Camera size={14}/> Foto
-            </button>
-          )}
+          <label className={`checkbox-filter carrito-toggle${modoCarrito ? ' activo' : ''}`} title="Ir montando productos al carrito y pagarlos después con el ticket">
+            <input
+              type="checkbox"
+              checked={modoCarrito}
+              onChange={(e) => setModoCarrito(e.target.checked)}
+            />
+            <span>🛒 Carrito</span>
+          </label>
           <label className="checkbox-filter">
             <input
               type="checkbox"
@@ -547,6 +548,25 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
         </div>
       </div>
 
+      {/* Resumen del carrito */}
+      {modoCarrito && (
+        <div className="carrito-summary">
+          <div className="carrito-summary-item">
+            <span>🛒 En el carrito</span>
+            <strong>{enCarrito.length} · ${fmt(enCarrito.reduce((s, i) => s + montoPend(i), 0))}</strong>
+          </div>
+          <div className="carrito-summary-item falta">
+            <span>Falta montar</span>
+            <strong>{faltan.length} · ${fmt(faltan.reduce((s, i) => s + montoPend(i), 0))}</strong>
+          </div>
+          {enCarrito.length > 0 && (
+            <button className="btn-sm-outline" onClick={vaciarCarrito} title="Sacar todo del carrito sin pagar">
+              Vaciar carrito
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Periodos */}
       {periodos.map((periodo, idx) => {
         const isCurrentPeriod = esPeriodoActual(periodo, grupo?.frecuencia, anio, mes);
@@ -558,6 +578,7 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
             onChange={updated => updatePeriodo(idx, updated)}
             isCurrentPeriod={isCurrentPeriod}
             mostrarPagados={mostrarPagados}
+            modoCarrito={modoCarrito}
             tarjetas={tarjetas}
             onPagar={(itemIdx, tarjetaId) => pagarItem(idx, itemIdx, tarjetaId)}
             onDespagar={itemIdx => despagarItem(idx, itemIdx)}
@@ -565,18 +586,6 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
           />
         );
       })}
-
-      {showFlujoDesglose && (
-        <FlujoDesglose
-          apiKey={apiKey}
-          mesData={mesData}
-          grupos={grupos}
-          año={anio}
-          mes={mes}
-          onAplicar={aplicarDesglose}
-          onClose={() => setShowFlujoDesglose(false)}
-        />
-      )}
     </div>
   );
 }

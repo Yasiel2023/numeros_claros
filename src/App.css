@@ -186,6 +186,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .mes-nav-btn:hover { background: var(--teal-l); color: var(--teal); border-color: var(--teal); }
 .mes-label { font-size: 13px; font-weight: 700; color: var(--text); }
 
+.sidebar-foto-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; margin: 10px 8px 0; padding: 9px 10px;
+  border-radius: 8px; border: 1px solid var(--teal); background: var(--teal-l); color: var(--teal);
+  font-family: var(--font); font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.12s;
+}
+.sidebar-foto-btn:hover:not(:disabled) { background: var(--teal); color: #fff; }
+.sidebar-foto-btn:disabled { opacity: .5; cursor: default; }
 .sidebar-nav { flex: 1; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .nav-item {
   display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px;
@@ -578,9 +585,28 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   padding: 24px;
 }
 .desglose-modal { display: flex; flex-direction: column; gap: 16px; }
-.modal-header { border-bottom: 1px solid var(--border); padding-bottom: 12px; }
-.modal-header h2 { font-size: 18px; margin-bottom: 4px; }
-.modal-footer { display: flex; gap: 10px; padding-top: 12px; border-top: 1px solid var(--border); justify-content: flex-end; }
+/* Cabecera y pie quedan fijos mientras se scrollea el contenido del modal */
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  position: sticky; top: -24px; z-index: 2; background: var(--surface);
+  margin: -24px -24px 16px; padding: 18px 24px 14px; border-bottom: 1px solid var(--border);
+}
+.modal-header h2 { font-size: 18px; margin: 0; }
+.modal-close { border-radius: 8px; width: 34px; height: 34px; justify-content: center; flex-shrink: 0; }
+.modal-close:hover { background: var(--surface2); }
+.modal-footer {
+  display: flex; gap: 10px; align-items: center; justify-content: space-between;
+  position: sticky; bottom: -24px; z-index: 2; background: var(--surface);
+  margin: 16px -24px -24px; padding: 14px 24px 18px; border-top: 1px solid var(--border);
+}
+/* Dentro de un modal, btn-cancel es un botón con texto (no el ✕ cuadrado de las tablas) */
+.modal-content .btn-cancel {
+  width: auto; height: auto; padding: 10px 16px; border-radius: 8px; gap: 6px;
+  background: var(--surface); color: var(--text2); font-family: var(--font); font-size: 14px; font-weight: 600;
+  white-space: nowrap; display: inline-flex; align-items: center;
+}
+.modal-content .btn-cancel:hover:not(:disabled) { background: var(--surface2); border-color: var(--text3); color: var(--text); }
+.modal-content .btn-primary { padding: 10px 18px; border-radius: 8px; font-size: 14px; white-space: nowrap; }
 
 .desglose-periodo { display: flex; flex-direction: column; gap: 8px; }
 .desglose-periodo label { font-weight: 600; font-size: 14px; }
@@ -652,6 +678,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .desglose-resumen { padding: 12px; background: var(--surface2); border-radius: 8px; margin-bottom: 16px; }
 .desglose-resumen h3 { font-size: 14px; margin-bottom: 8px; }
 .resumen-item { font-size: 13px; color: var(--text2); padding: 6px 0; }
+.desglose-descuento { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--teal); background: var(--teal-l); border-radius: 8px; font-size: 13px; color: var(--text); cursor: pointer; }
+.desglose-descuento input { margin-top: 2px; cursor: pointer; }
+.desglose-item-original { text-decoration: line-through; color: var(--text3); font-weight: 400; font-size: 12px; margin-right: 6px; }
+.desglose-tienda { font-size: 13px; color: var(--text2); font-weight: 600; }
+.desglose-item-row.asignado { border-color: var(--teal); }
+.desglose-item-cant { font-weight: 400; color: var(--text3); font-size: 12px; }
+.desglose-item-campos { display: flex; flex-wrap: wrap; gap: 8px; }
+.desglose-item-campos .desglose-item-select { flex: 1 1 180px; width: auto; }
+.desglose-buscando { flex: 1 1 180px; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text3); }
 
 /* ── Chat de preguntas ───────────────────────────────────────– */
 .chat-container { display: flex; flex-direction: column; gap: 12px; height: calc(100vh - 180px); }
@@ -759,6 +794,20 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ps-item.orange strong { color: var(--orange); }
 .ps-item.teal strong { color: var(--teal); }
 .ps-item.green strong { color: var(--green); }
+
+/* ── Modo carrito ─────────────────────────────────────────────– */
+.carrito-toggle { padding: 3px 10px; border: 1px solid var(--border); border-radius: 20px; transition: all .12s; }
+.carrito-toggle.activo { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; font-weight: 700; }
+.btn-montar { padding: 4px 10px; background: #ede9fe; color: #6d28d9; border: 1px solid #c4b5fd; border-radius: 6px; font-family: var(--font); font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.12s; white-space: nowrap; }
+.btn-montar:hover { background: #7c3aed; color: #fff; }
+.row-carrito td { background: #faf5ff; }
+.item-carrito-tag { margin-left: 8px; font-size: 11px; font-weight: 600; color: #6d28d9; background: #ede9fe; border-radius: 20px; padding: 1px 8px; white-space: nowrap; }
+.carrito-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
+.carrito-summary-item { display: flex; flex-direction: column; gap: 2px; }
+.carrito-summary-item span { font-size: 11px; color: #6d28d9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.carrito-summary-item strong { font-size: 17px; font-family: var(--mono); font-weight: 700; color: #6d28d9; }
+.carrito-summary-item.falta span, .carrito-summary-item.falta strong { color: var(--orange); }
+.carrito-summary .btn-sm-outline { margin-left: auto; }
 .total-row-pend td { padding: 4px 8px 4px 16px; color: var(--orange); font-size: 13px; border-top: 1px dashed var(--border2); }
 .total-row-pago td { padding: 4px 8px 8px 16px; color: var(--green); font-size: 13px; }
 .total-row-pend .pend-total-cell, .total-row-pago .pagado-total-cell { font-family: var(--mono); font-weight: 700; }

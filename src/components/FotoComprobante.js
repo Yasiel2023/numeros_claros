@@ -1,11 +1,11 @@
 // src/components/FotoComprobante.js
 import React, { useRef, useState } from 'react';
 import { Camera, Trash2, AlertCircle, Loader } from 'lucide-react';
-import { desglosarComprobante } from '../gemini';
+import { desglosarComprobante } from '../ia';
 
 const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
-export default function FotoComprobante({ apiKey, onDesglose, loading: externalLoading }) {
+export default function FotoComprobante({ ia, onDesglose, loading: externalLoading }) {
   const cameraRef = useRef(null);
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -83,7 +83,7 @@ export default function FotoComprobante({ apiKey, onDesglose, loading: externalL
     setError('');
 
     try {
-      const resultado = await desglosarComprobante(photo, apiKey);
+      const resultado = await desglosarComprobante(photo, ia);
       onDesglose(resultado, photo);
     } catch (e) {
       setError(e.message);

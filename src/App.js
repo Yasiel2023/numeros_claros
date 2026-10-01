@@ -8,13 +8,13 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import Ingresos from './components/Ingresos';
-import GrupoGastos from './components/GrupoGastos';
+import GrupoGastos, { toPeriodos, aplicarPagoTarjeta } from './components/GrupoGastos';
 import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
 import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
 import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financiaciones';
-import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard, Smile, PiggyBank, Menu } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard, Smile, PiggyBank, Menu, Camera } from 'lucide-react';
 import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
 import InvitacionesBanner from './components/InvitacionesBanner';
@@ -22,8 +22,7 @@ import Tarjetas from './components/Tarjetas';
 import NuevoMesModal from './components/NuevoMesModal';
 import OnboardingWizard from './components/OnboardingWizard';
 import Config from './components/Config';
-import FotoComprobante from './components/FotoComprobante';
-import AplicarDesglose from './components/AplicarDesglose';
+import FlujoDesglose from './components/FlujoDesglose';
 import Chat from './components/Chat';
 import './App.css';
 
@@ -110,6 +109,11 @@ function initMesData(año, mes, defaults) {
   };
 }
 
+// Renombres solo de pantalla: en la base el grupo sigue con su nombre original
+const NOMBRES_VISIBLES = { compras: 'Supermercado' };
+const nombreVisibleGrupo = (nombre) =>
+  NOMBRES_VISIBLES[(nombre || '').trim().toLowerCase()] || nombre;
+
 // Iconos para el NAV dinámico de grupos
 const GRUPO_ID_ICON        = { basicos: Home, impuestos: Receipt, compras: ShoppingCart, supermercado: ShoppingCart, asceo: Droplets, ocio: Smile };
 const GRUPO_FRECUENCIA_ICON = { mensual: Home, quincenal: Receipt, cada10dias: BarChart2, semanal: ShoppingCart };
@@ -174,14 +178,14 @@ function AppInterna() {
   const [groqApiKey, setGroqApiKey] = useState('');
   const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
-  const [geminiApiKey, setGeminiApiKey] = useState('');
   // ── Flujo de foto + desglose ──────────────────────────
   const [showFotoModal, setShowFotoModal] = useState(false);
-  const [desglosing, setDesglosing] = useState(false);
-  const [desglozeResult, setDesglozeResult] = useState(null);
-  const [fotoOriginal, setFotoOriginal] = useState(null);
   // ── Grupos de gastos del presupuesto activo ───────────────────
-  const grupos = toArray(defaults?.grupos_gastos || []);
+  // gruposDB conserva los nombres guardados (para escribir en Firebase);
+  // grupos es la versión para mostrar, con los renombres de NOMBRES_VISIBLES.
+  const gruposDB = toArray(defaults?.grupos_gastos || []);
+  const grupos = gruposDB.map(g => ({ ...g, nombre: nombreVisibleGrupo(g.nombre) }));
+  const defaultsVista = defaults ? { ...defaults, grupos_gastos: grupos } : defaults;
 
   // NAV dinámico (Ingresos fijos + un ítem por cada grupo + secciones finales)
   const NAV = [
@@ -232,20 +236,6 @@ function AppInterna() {
       }
     };
     cargarGroqConfig();
-  }, [user?.uid]);
-
-  // ── Cargar API key de Gemini ──────────────────────────
-  useEffect(() => {
-    if (!user?.uid) return;
-    const cargarGeminiKey = async () => {
-      try {
-        const snap = await get(ref(db, `config/${user.uid}/gemini_api_key`));
-        setGeminiApiKey(snap.exists() ? snap.val() : '');
-      } catch (e) {
-        console.error('Error cargando Gemini API key:', e);
-      }
-    };
-    cargarGeminiKey();
   }, [user?.uid]);
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
@@ -552,6 +542,69 @@ function AppInterna() {
     saveTimer.current = setTimeout(() => autoGuardar(newData), 1200);
   }, [autoGuardar]);
 
+  // ── Aplicar comprobante: cada item puede ir a una categoría distinta ─────────
+  // asignaciones: [{tipo: 'matchear'|'crear', grupoId, periodoNumero, itemName, nombre, monto}]
+  // tarjetaId: tarjeta con la que se pagó ('' = efectivo). Cada item queda vinculado
+  // a la tarjeta igual que al pagar un gasto a mano, para poder revertirlo después.
+  const aplicarComprobante = useCallback((asignaciones, tarjetaId = '') => {
+    if (!mesData || !asignaciones.length) return;
+    const gastos = { ...(mesData.gastos || {}) };
+    let tarjetas = mesData.tarjetas || [];
+    const esDebito = tarjetas.find(t => t.id === tarjetaId)?.tipo === 'debito';
+    const base36 = Date.now().toString(36);
+
+    asignaciones.forEach((a, n) => {
+      let datosTarjeta = {};
+      if (tarjetaId) {
+        const res = aplicarPagoTarjeta(tarjetas, tarjetaId, a.monto, a.nombre, `mov_${base36}_${n}`);
+        tarjetas = res.tarjetas;
+        datosTarjeta = { tarjetaId, tarjetaMonto: a.monto, ...(esDebito ? { tarjetaMovId: res.movId } : {}) };
+      }
+
+      const periodos = toPeriodos(gastos[a.grupoId] || []);
+      gastos[a.grupoId] = periodos.map(p => {
+        if (p.numero !== a.periodoNumero) return p;
+        const items = [...(p.items || [])];
+        const i = a.tipo === 'matchear' ? items.findIndex(it => it.nombre === a.itemName) : -1;
+        const existente = i >= 0 ? items[i] : null;
+
+        if (existente && existente.pagado !== true) {
+          // Un gasto pendiente tiene real = monto esperado: se reemplaza por lo pagado.
+          // Si estaba en el carrito, sale de él.
+          const { enCarrito: _ec, ...pendiente } = existente;
+          items[i] = { ...pendiente, real: a.monto, pagado: true, ...datosTarjeta };
+        } else if (existente && !tarjetaId && !existente.tarjetaId) {
+          // Ya pagado en efectivo y este también: se suma
+          items[i] = { ...existente, real: (existente.real || 0) + a.monto };
+        } else {
+          // Nuevo, o un gasto ya pagado que no puede quedar vinculado a dos pagos
+          // distintos: se agrega como item aparte con el nombre del gasto
+          const nombre = existente ? existente.nombre : a.nombre;
+          items.push({ nombre, previsto: existente ? 0 : a.monto, real: a.monto, pagado: true, ...datosTarjeta });
+        }
+        return { ...p, items };
+      });
+    });
+
+    updateMesData({ ...mesData, gastos, tarjetas });
+  }, [mesData, updateMesData]);
+
+  // ── Tarjetas del último mes anterior que tenga alguna (hasta 12 meses atrás) ──
+  const buscarTarjetasPrevias = useCallback(async () => {
+    try {
+      let a = año, m = mes;
+      for (let i = 0; i < 12; i++) {
+        if (m === 0) { m = 11; a -= 1; } else { m -= 1; }
+        const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${a}_${m}`));
+        if (!snap.exists()) continue;
+        // normalizeMesData convierte los saldos de débito a array (RTDB puede devolver objetos)
+        const tarjetas = normalizeMesData(snap.val()).tarjetas;
+        if (tarjetas.length > 0) return { tarjetas, label: `${MESES_ES[m]} ${a}` };
+      }
+    } catch (e) { console.error('Error buscando tarjetas de meses anteriores:', e); }
+    return null;
+  }, [año, mes, ownerUidActual, presupuestoActual]);
+
   // ── Confirmar nuevo mes desde modal ─────────────────────────────────────────
   const confirmarNuevoMes = useCallback(async (templateId, objetivo) => {
     let defaultsParaMes = defaults;
@@ -565,23 +618,34 @@ function AppInterna() {
     }
     let data = { ...initMesData(año, mes, defaultsParaMes), objetivoAhorro: objetivo || 0 };
 
-    // Arrastrar las tarjetas del mes anterior: el credito arranca en cero y
-    // el debito conserva su ultimo saldo.
-    try {
-      const mesPrev = mes === 0 ? 11 : mes - 1;
-      const añoPrev = mes === 0 ? año - 1 : año;
-      const snapPrev = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${añoPrev}_${mesPrev}`));
-      if (snapPrev.exists()) {
-        data.tarjetas = tarjetasParaMesNuevo(toArray(snapPrev.val().tarjetas || []));
-      }
-    } catch (e) { console.error('Error arrastrando tarjetas:', e); }
+    // Arrastrar las tarjetas del último mes que las tenga: el credito arranca
+    // en cero y el debito conserva su ultimo saldo.
+    const previas = await buscarTarjetasPrevias();
+    if (previas) data.tarjetas = tarjetasParaMesNuevo(previas.tarjetas);
 
     // Cargar las cuotas que le tocan a este mes
     data = aplicarCuotas(data, financiaciones, año, mes);
 
     setNuevoMesPendiente(false);
     updateMesData(data);
-  }, [año, mes, defaults, userTemplates, updateMesData, financiaciones, ownerUidActual, presupuestoActual]); // eslint-disable-line
+  }, [año, mes, defaults, userTemplates, updateMesData, financiaciones, buscarTarjetasPrevias]); // eslint-disable-line
+
+  // ── Mes con tarjetas vacío: ofrecer traerlas del último mes que las tenga ──
+  const [tarjetasPrevias, setTarjetasPrevias] = useState(null); // { tarjetas, label } | null
+  const sinTarjetas = !!mesData && (mesData.tarjetas || []).length === 0;
+  useEffect(() => {
+    setTarjetasPrevias(null);
+    if (!sinTarjetas) return;
+    let cancelado = false;
+    buscarTarjetasPrevias().then(res => { if (!cancelado) setTarjetasPrevias(res); });
+    return () => { cancelado = true; };
+  }, [sinTarjetas, buscarTarjetasPrevias]);
+
+  const importarTarjetasPrevias = () => {
+    if (!tarjetasPrevias || !mesData) return;
+    const data = { ...mesData, tarjetas: tarjetasParaMesNuevo(tarjetasPrevias.tarjetas) };
+    updateMesData(aplicarCuotas(data, financiaciones, año, mes));
+  };
 
   // ── Guardar mes actual como plantilla de usuario ─────────────
   const guardarMesComoPlantilla = useCallback(async () => {
@@ -592,7 +656,7 @@ function AppInterna() {
       const tplId = `${slug}_${Date.now().toString(36)}`;
       const tplData = {
         _meta: { nombre: nombreTplNueva.trim(), creadoEn: new Date().toISOString() },
-        grupos_gastos: grupos.map(g => ({
+        grupos_gastos: gruposDB.map(g => ({
           ...g,
           items: ((mesData.gastos[g.id] || [])[0]?.items || g.items || [])
             .map(i => ({ nombre: i.nombre, previsto: i.previsto || 0 })),
@@ -612,7 +676,7 @@ function AppInterna() {
       console.error('Error guardando plantilla:', e);
     }
     setGuardandoTpl(false);
-  }, [mesData, user, grupos, nombreTplNueva]); // eslint-disable-line
+  }, [mesData, user, gruposDB, nombreTplNueva]); // eslint-disable-line
 
   // ── Navegar meses ─────────────────────────────────────────────
   const mesAnterior = () => {
@@ -790,6 +854,17 @@ function AppInterna() {
           <button className="mes-nav-btn" onClick={mesSiguiente}><ChevronRight size={16}/></button>
         </div>
 
+        {groqApiKey && (
+          <button
+            className="sidebar-foto-btn"
+            onClick={() => { setShowFotoModal(true); closeSidebar(); }}
+            disabled={!mesData || loading || nuevoMesPendiente}
+            title="Cargar los gastos de un comprobante con IA"
+          >
+            <Camera size={16}/> <span>Cargar comprobante</span>
+          </button>
+        )}
+
         <nav className="sidebar-nav">
           {NAV.map(({ key, label, icon: Icon, emoji }) => (
             <button key={key} className={`nav-item ${vista === key ? 'active' : ''}`}
@@ -874,6 +949,19 @@ function AppInterna() {
           </div>
         )}
 
+        {/* Modal comprobante con IA */}
+        {showFotoModal && mesData && (
+          <FlujoDesglose
+            ia={{ apiKey: groqApiKey, url: groqUrl }}
+            mesData={mesData}
+            grupos={grupos}
+            año={año}
+            mes={mes}
+            onAplicar={aplicarComprobante}
+            onClose={() => setShowFotoModal(false)}
+          />
+        )}
+
         {/* Modal nuevo mes */}
         {nuevoMesPendiente && (
           <NuevoMesModal
@@ -946,9 +1034,6 @@ function AppInterna() {
                       }
                       anio={año}
                       mes={mes}
-                      apiKey={geminiApiKey}
-                      mesData={mesData}
-                      grupos={grupos}
                     />
                   </div>
                 );
@@ -965,6 +1050,8 @@ function AppInterna() {
                     onChangeFinanciaciones={updateFinanciaciones}
                     cuotasPendientes={cuotasPendientes(financiaciones, mesData, año, mes)}
                     onAplicarCuotas={() => updateMesData(aplicarCuotas(mesData, financiaciones, año, mes))}
+                    tarjetasPreviasLabel={tarjetasPrevias?.label}
+                    onImportarTarjetasPrevias={importarTarjetasPrevias}
                     anio={año}
                     mes={mes}
                   />
@@ -997,7 +1084,7 @@ function AppInterna() {
                       groqModel={groqModel}
                       presupuestos={presupuestos}
                       mesDataByMonth={{ [`${año}_${mes}`]: mesData }}
-                      defaults={defaults}
+                      defaults={defaultsVista}
                       año={año}
                       mes={mes}
                     />

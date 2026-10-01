@@ -88,7 +88,8 @@ export function tarjetasParaMesNuevo(tarjetasPrev) {
       const ultimo = saldos.length > 0 ? saldos[saldos.length - 1].monto : (t.saldoInicial || 0);
       return { ...t, saldoInicial: ultimo, saldos: [] };
     }
-    const { cuotas: _cuotas, ...resto } = t;
+    // Los pagos y cuotas son del mes anterior: el mes nuevo arranca sin deuda ni pagos
+    const { cuotas: _cuotas, pagos: _pagos, montoPagado: _mp, ...resto } = t;
     return { ...resto, monto: 0, pagado: false };
   });
 }

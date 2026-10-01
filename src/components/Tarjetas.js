@@ -2,7 +2,7 @@
 // Credito: monto pendiente + pagado (modelo existente)
 // Debito:  saldoInicial + historial de saldos [{ts, fecha, monto, nota}]
 import React, { useState } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, CalendarClock } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, CalendarClock, CreditCard } from 'lucide-react';
 import { MESES_ES } from '../constants';
 import { numeroCuota, estaActiva } from '../financiaciones';
 import { pagadoTarjeta, saldoTarjeta, gastosDeTarjeta, montoCargado } from '../tarjetas';
@@ -563,6 +563,7 @@ export default function Tarjetas({
   data = [], gastos = {}, onChange,
   financiaciones = [], onChangeFinanciaciones,
   cuotasPendientes = [], onAplicarCuotas,
+  tarjetasPreviasLabel, onImportarTarjetasPrevias,
   anio, mes,
 }) {
   const [showAdd, setShowAdd] = useState(false);
@@ -660,6 +661,20 @@ export default function Tarjetas({
           <Plus size={14}/> Agregar tarjeta
         </button>
       </div>
+
+      {/* Mes sin tarjetas: traerlas del último mes que las tenga */}
+      {data.length === 0 && tarjetasPreviasLabel && (
+        <div className="cuotas-banner">
+          <CreditCard size={16} className="cuotas-banner-icon" />
+          <div className="cuotas-banner-txt">
+            <strong>Este mes no tiene tarjetas</strong>
+            <span>Podés traer las de {tarjetasPreviasLabel}: el débito conserva su saldo y el crédito arranca en cero.</span>
+          </div>
+          <button className="cuotas-banner-btn" onClick={onImportarTarjetasPrevias}>
+            Traer tarjetas
+          </button>
+        </div>
+      )}
 
       {/* Cuotas de este mes que todavia no se cargaron */}
       {cuotasPendientes.length > 0 && (
