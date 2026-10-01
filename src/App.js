@@ -188,7 +188,6 @@ function AppInterna() {
   // grupos es la versión para mostrar, con los renombres de NOMBRES_VISIBLES.
   const gruposDB = toArray(defaults?.grupos_gastos || []);
   const grupos = gruposDB.map(g => ({ ...g, nombre: nombreVisibleGrupo(g.nombre) }));
-  const defaultsVista = defaults ? { ...defaults, grupos_gastos: grupos } : defaults;
 
   // NAV dinámico (Ingresos fijos + un ítem por cada grupo + secciones finales)
   const NAV = [
@@ -1112,9 +1111,12 @@ function AppInterna() {
                       apiKey={groqApiKey}
                       groqUrl={groqUrl}
                       groqModel={groqModel}
-                      presupuestos={presupuestos}
-                      mesDataByMonth={{ [`${año}_${mes}`]: mesData }}
-                      defaults={defaultsVista}
+                      presupuestoNombre={presupuestos.find(p => p.id === presupuestoActual)?.nombre || presupuestoActual}
+                      ownerUid={ownerUidActual}
+                      presupuestoId={presupuestoActual}
+                      grupos={grupos}
+                      tarjetas={mesData?.tarjetas || []}
+                      financiaciones={financiaciones}
                       año={año}
                       mes={mes}
                     />
