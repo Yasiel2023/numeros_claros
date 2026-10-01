@@ -212,7 +212,7 @@ export default function Chat({
             <p className="chat-ctx-ayuda">
               Esto lo arma la app con tus datos actuales y se manda en cada pregunta, junto con tus notas.
               Además, la IA puede pedir datos con estas consultas: resumen_meses, detalle_categoria, buscar_gastos,
-              comprobantes, tarjetas y compras_en_cuotas. La app las ejecuta y le devuelve solo lo pedido.
+              listar_gastos, sumar_gastos, comprobantes, tarjetas y compras_en_cuotas. La app las ejecuta y le devuelve solo lo pedido.
             </p>
             <pre className="chat-ctx-auto">{auto}</pre>
           </div>
@@ -232,7 +232,7 @@ export default function Chat({
             <p className="chat-ejemplos">
               Ej: "¿Cuánto gasté en supermercado este mes vs el anterior?" <br/>
               "¿Cuál fue mi categoría más cara en los últimos 3 meses?" <br/>
-              "¿Cuánto gasté en carne este mes?" <br/>
+              "¿Cuánto gasté en lácteos en los últimos 3 meses?" <br/>
               "¿Cuánto me queda por pagar de la tarjeta?"
             </p>
           </div>

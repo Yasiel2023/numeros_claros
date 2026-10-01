@@ -88,6 +88,9 @@ ${financiaciones.map(f => `- ${f.concepto}: ${f.cuotasTotales} cuotas de ${f.mon
 
 CÓMO TRABAJAR
 - No inventes datos: usá las herramientas para obtener lo que necesites y pedí solo los meses necesarios.
+- Para preguntas sobre una familia de productos o un tipo de gasto (ej: "¿cuánto gasté en lácteos?"): primero usá listar_gastos, elegí vos los nombres que pertenecen a esa familia (incluí abreviaturas y marcas, ej: "Leche", "Yogur", "Queso Dambo", "Manteca") y después pasalos EXACTOS a sumar_gastos. Nunca sumes montos vos mismo.
+- "Gastado" se refiere a lo pagado; mencioná lo pendiente aparte si lo hay.
+- En la respuesta, listá qué gastos incluiste para que el usuario pueda verificar.
 - Si una herramienta dice que un mes no tiene datos, decíselo al usuario.
 - Respondé en español rioplatense, claro y breve.`;
 }
@@ -155,6 +158,29 @@ export const HERRAMIENTAS = [
           meses: paramMeses,
         },
         required: ['texto', 'meses'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listar_gastos',
+      description: 'Lista los nombres distintos de todos los gastos (items) de las categorías en los meses pedidos, agrupados por categoría y sin montos. Usala para encontrar los gastos de una familia de productos (ej: lácteos, carne, limpieza) y después sumarlos con sumar_gastos.',
+      parameters: { type: 'object', properties: { meses: paramMeses }, required: ['meses'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'sumar_gastos',
+      description: 'Suma los gastos cuyos nombres coinciden EXACTAMENTE con los indicados (tal como los devolvió listar_gastos), en los meses pedidos. Devuelve total pagado, pendiente y detalle por mes y por gasto.',
+      parameters: {
+        type: 'object',
+        properties: {
+          nombres: { type: 'array', items: { type: 'string' }, description: 'Nombres exactos de los gastos a sumar' },
+          meses: paramMeses,
+        },
+        required: ['nombres', 'meses'],
       },
     },
   },
@@ -345,6 +371,54 @@ const EJECUTORES = {
     }
     res.total_gastos_pagados = r2(res.gastos.filter(g => g.pagado).reduce((s, g) => s + g.real, 0));
     res.total_en_comprobantes = r2(res.productos_en_comprobantes.reduce((s, p) => s + p.monto, 0));
+    return res;
+  },
+
+  async listar_gastos(ctx, { meses }) {
+    const porCategoria = {};
+    for (const m of await mesesPedidos(ctx, meses)) {
+      if (m.error || !m.data) continue;
+      Object.keys(m.data.gastos).forEach(gid => {
+        const cat = nombreGrupo(ctx, gid);
+        if (!porCategoria[cat]) porCategoria[cat] = new Set();
+        m.data.gastos[gid].forEach(p => p.items.forEach(i => { if (i.nombre) porCategoria[cat].add(i.nombre); }));
+      });
+    }
+    return Object.fromEntries(Object.entries(porCategoria).map(([cat, set]) => [cat, [...set].sort()]));
+  },
+
+  async sumar_gastos(ctx, { nombres, meses }) {
+    const buscados = new Set((Array.isArray(nombres) ? nombres : [nombres]).map(normalizar).filter(Boolean));
+    if (buscados.size === 0) return { error: 'No se indicaron nombres' };
+
+    const res = { por_mes: {}, por_gasto: {}, total_pagado: 0, total_pendiente: 0, detalle: [] };
+    for (const m of await mesesPedidos(ctx, meses)) {
+      if (m.error) { res.por_mes[m.mes] = m.error; continue; }
+      if (!m.data) { res.por_mes[m.info.iso] = 'Sin datos para este mes'; continue; }
+      let pagadoMes = 0;
+      let pendienteMes = 0;
+      Object.keys(m.data.gastos).forEach(gid => {
+        m.data.gastos[gid].forEach(p => p.items.forEach(i => {
+          if (!buscados.has(normalizar(i.nombre))) return;
+          const pagado = i.pagado === true;
+          const monto = pagado ? (i.real || 0) : montoPendiente(i);
+          if (pagado) pagadoMes += monto; else pendienteMes += monto;
+          if (pagado) res.por_gasto[i.nombre] = r2((res.por_gasto[i.nombre] || 0) + monto);
+          res.detalle.push({
+            mes: m.info.iso, categoria: nombreGrupo(ctx, gid), periodo: p.label,
+            nombre: i.nombre, monto: r2(monto), pagado,
+          });
+        }));
+      });
+      res.por_mes[m.info.iso] = { pagado: r2(pagadoMes), pendiente: r2(pendienteMes) };
+      res.total_pagado += pagadoMes;
+      res.total_pendiente += pendienteMes;
+    }
+    res.total_pagado = r2(res.total_pagado);
+    res.total_pendiente = r2(res.total_pendiente);
+    const encontrados = new Set(res.detalle.map(d => normalizar(d.nombre)));
+    const noEncontrados = [...buscados].filter(n => !encontrados.has(n));
+    if (noEncontrados.length) res.nombres_no_encontrados = noEncontrados;
     return res;
   },
 
