@@ -97,14 +97,42 @@ export default function Chat({ apiKey, groqUrl, groqModel, presupuestos, mesData
     setError('');
 
     try {
-      // Detectar si pide datos históricos
-      const palabrasClave = ['pasado', 'anterior', 'mes anterior', 'vs', 'comparar', 'comparativa',
-                             'últimos', 'última', 'tendencia', 'evolución', 'promedio', 'histórico',
-                             'semana pasada', 'mes pasado', 'hace'];
-      const esHistorico = palabrasClave.some(palabra =>
-        pregunta.toLowerCase().includes(palabra)
+      // PASO 1: Preguntarle al LLM si necesita datos históricos
+      const respuestaAnalisis = await fetch(
+        `${groqUrl}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: groqModel,
+            messages: [
+              {
+                role: 'system',
+                content: 'Eres un analizador de preguntas financieras. Responde SOLO con SÍ o NO. SÍ = requiere datos de múltiples meses. NO = solo necesita mes actual.'
+              },
+              {
+                role: 'user',
+                content: `¿Esta pregunta necesita datos de múltiples meses para responder correctamente? "${pregunta}"`
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 10
+          }),
+        }
       );
 
+      if (!respuestaAnalisis.ok) {
+        throw new Error('Error analizando pregunta');
+      }
+
+      const resultAnalisis = await respuestaAnalisis.json();
+      const respAnalisis = resultAnalisis.choices?.[0]?.message?.content?.trim().toUpperCase() || 'NO';
+      const esHistorico = respAnalisis.includes('SÍ') || respAnalisis.includes('SI');
+
+      // PASO 2: Preparar contexto según sea necesario
       const mesActualKey = `${año}_${mes}`;
       const mesActual = mesDataByMonth[mesActualKey];
 
