@@ -1,6 +1,67 @@
 {
   "rules": {
-    ".read": "now < 1776049200000",
-    ".write": "now < 1776049200000"
+    "presupuestos": {
+      "$owner": {
+        ".read": "auth != null && auth.uid === $owner",
+        ".write": "auth != null && auth.uid === $owner",
+        "$pid": {
+          ".read": "auth != null && root.child('accesos').child(auth.uid).child($pid).child('ownerUid').val() === $owner",
+          ".write": "auth != null && root.child('accesos').child(auth.uid).child($pid).child('ownerUid').val() === $owner"
+        }
+      }
+    },
+
+    "accesos": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$pid": {
+          ".read": "auth != null && root.child('presupuestos').child(auth.uid).child($pid).exists()",
+          ".write": "auth != null && auth.uid === $uid && (!newData.exists() || (newData.child('ownerUid').val() === auth.uid && root.child('presupuestos').child(auth.uid).child($pid).exists()) || (newData.child('rol').val() === 'miembro' && root.child('invitaciones').child(auth.uid).child($pid).child('estado').val() === 'pendiente' && root.child('invitaciones').child(auth.uid).child($pid).child('ownerUid').val() === newData.child('ownerUid').val()))"
+        }
+      }
+    },
+
+    "invitaciones": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$pid": {
+          ".read": "auth != null && root.child('presupuestos').child(auth.uid).child($pid).exists()",
+          ".write": "auth != null && ((newData.child('ownerUid').val() === auth.uid && root.child('presupuestos').child(auth.uid).child($pid).exists()) || (auth.uid === $uid && data.exists() && newData.child('ownerUid').val() === data.child('ownerUid').val() && newData.child('presupuestoId').val() === data.child('presupuestoId').val()))"
+        }
+      }
+    },
+
+    "config": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "user_templates": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "email_uid": {
+      "$email": {
+        ".read": "auth != null",
+        ".write": "auth != null && newData.val() === auth.uid && ($email === auth.token.email.replace('.', ',') || $email === auth.token.email.toLowerCase().replace('.', ','))"
+      }
+    },
+
+    "admins": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid && (!newData.exists() || newData.val() === true)"
+      }
+    },
+
+    "defaults": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
   }
 }
