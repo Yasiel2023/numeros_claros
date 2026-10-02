@@ -67,3 +67,6 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# Configuración local de Android Studio / IntelliJ
+.idea/
