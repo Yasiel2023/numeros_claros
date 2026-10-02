@@ -4,24 +4,18 @@
 // La data llega como array de periodos: [{numero, label, items:[]}]
 // Compatibilidad atras: si llegan items planos se envuelven en un unico periodo.
 import React, { useState, useEffect } from 'react';
+import { money, esSecundaria, simbolo } from '../moneda';
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
-
-const fmt = (n) =>
-  new Intl.NumberFormat('es-UY', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-    useGrouping: false,
-  }).format(n || 0);
 
 const fmtFechaHora = () => {
   const d = new Date();
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
-// Los items de gasto no tienen moneda propia (siempre UYU), asi que solo se
-// pueden cargar pagos a tarjetas en UYU.
+// Los items de gasto están en la moneda principal del presupuesto, así que solo se
+// pueden cargar pagos a tarjetas en esa moneda (no en la secundaria).
 export const tarjetasDisponibles = (tarjetas) =>
-  (tarjetas || []).filter(t => t.moneda === 'UYU' && t.id);
+  (tarjetas || []).filter(t => !esSecundaria(t.moneda) && t.id);
 
 export const saldoActualDebito = (t) => {
   const saldos = t.saldos || [];
@@ -201,7 +195,7 @@ function ItemRow({ item, tarjetas, modoCarrito, onChange, onDelete, onPagar, onD
         <tr className="pago-select-row">
           <td colSpan={5}>
             <div className="pago-select-wrap">
-              <span className="pago-select-label">¿Con qué pagaste ${fmt(real)}?</span>
+              <span className="pago-select-label">¿Con qué pagaste {money(real)}?</span>
               <select
                 className="pago-select"
                 value={seleccion}
@@ -212,7 +206,7 @@ function ItemRow({ item, tarjetas, modoCarrito, onChange, onDelete, onPagar, onD
                 {opciones.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.tipo === 'debito'
-                      ? `🏧 ${t.nombre} — saldo $${fmt(saldoActualDebito(t))}`
+                      ? `🏧 ${t.nombre} — saldo ${money(saldoActualDebito(t))}`
                       : `💳 ${t.nombre} — crédito`}
                   </option>
                 ))}
@@ -271,7 +265,7 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
           <span className="periodo-label">{periodo.label}</span>
           <span className="periodo-stats">
             {modoCarrito && pendientes.length > 0 && <>🛒 {enCarrito}/{pendientes.length} &middot; </>}
-            {pagados}/{conPrev} pagados &middot; prev ${fmt(totalPrev)} &middot; pend ${fmt(totalPend)} &middot; pagado ${fmt(totalPagado)}
+            {pagados}/{conPrev} pagados &middot; prev {money(totalPrev)} &middot; pend {money(totalPend)} &middot; pagado {money(totalPagado)}
           </span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
@@ -292,7 +286,7 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
               <input
                 type="number" value={newPrev}
                 onChange={e => setNewPrev(e.target.value)}
-                placeholder="Previsto $"
+                placeholder={`Previsto ${simbolo()}`}
                 className="add-input short"
               />
               <button className="btn-confirm" onClick={addItem}><Check size={14} /></button>
@@ -313,8 +307,8 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
             <thead>
               <tr>
                 <th>Concepto</th>
-                <th>Previsto $</th>
-                <th>Real $</th>
+                <th>Previsto {simbolo()}</th>
+                <th>Real {simbolo()}</th>
                 <th></th>
                 <th></th>
               </tr>
@@ -343,19 +337,19 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
             <tfoot>
               <tr className="total-row">
                 <td><strong>Total previsto</strong></td>
-                <td><strong>${fmt(totalPrev)}</strong></td>
+                <td><strong>{money(totalPrev)}</strong></td>
                 <td /><td colSpan={2} />
               </tr>
               <tr className="total-row-pend">
                 <td>Pendiente de pago</td>
                 <td />
-                <td className="pend-total-cell">${fmt(totalPend)}</td>
+                <td className="pend-total-cell">{money(totalPend)}</td>
                 <td colSpan={2} />
               </tr>
               <tr className="total-row-pago">
                 <td>Pagado</td>
                 <td />
-                <td className="pagado-total-cell">${fmt(totalPagado)}</td>
+                <td className="pagado-total-cell">{money(totalPagado)}</td>
                 <td colSpan={2} />
               </tr>
             </tfoot>
@@ -512,13 +506,17 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
           )}
         </h2>
         <div className="section-header-right">
-          <label className={`checkbox-filter carrito-toggle${modoCarrito ? ' activo' : ''}`} title="Ir montando productos al carrito y pagarlos después con el ticket">
+          <label
+            className={`checkbox-filter carrito-toggle${modoCarrito ? ' activo' : ''}`}
+            title="Modo carrito: ir montando productos y pagarlos después con el ticket"
+            aria-label="Modo carrito"
+          >
             <input
               type="checkbox"
               checked={modoCarrito}
               onChange={(e) => setModoCarrito(e.target.checked)}
             />
-            <span>🛒 Carrito</span>
+            <span>🛒</span>
           </label>
           <label className="checkbox-filter">
             <input
@@ -536,15 +534,15 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
       <div className="pend-summary">
         <div className="ps-item">
           <span>Total previsto</span>
-          <strong>${fmt(totalPrev)}</strong>
+          <strong>{money(totalPrev)}</strong>
         </div>
         <div className="ps-item orange">
           <span>Pendiente de pago</span>
-          <strong>${fmt(totalPend)}</strong>
+          <strong>{money(totalPend)}</strong>
         </div>
         <div className="ps-item green">
           <span>Pagado</span>
-          <strong>${fmt(totalPagado)}</strong>
+          <strong>{money(totalPagado)}</strong>
         </div>
       </div>
 
@@ -553,11 +551,11 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
         <div className="carrito-summary">
           <div className="carrito-summary-item">
             <span>🛒 En el carrito</span>
-            <strong>{enCarrito.length} · ${fmt(enCarrito.reduce((s, i) => s + montoPend(i), 0))}</strong>
+            <strong>{enCarrito.length} · {money(enCarrito.reduce((s, i) => s + montoPend(i), 0))}</strong>
           </div>
           <div className="carrito-summary-item falta">
             <span>Falta montar</span>
-            <strong>{faltan.length} · ${fmt(faltan.reduce((s, i) => s + montoPend(i), 0))}</strong>
+            <strong>{faltan.length} · {money(faltan.reduce((s, i) => s + montoPend(i), 0))}</strong>
           </div>
           {enCarrito.length > 0 && (
             <button className="btn-sm-outline" onClick={vaciarCarrito} title="Sacar todo del carrito sin pagar">

@@ -1,13 +1,12 @@
 ﻿// src/components/DefaultsManager.js
 import React, { useState, useEffect } from 'react';
+import { money } from '../moneda';
 import { ref, get, set, remove } from 'firebase/database';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { FRECUENCIAS_GRUPO } from '../constants';
 import { Plus, Trash2, Save, Loader, Copy, Target, ChevronRight, FileText, AlertCircle, Check, X, Download } from 'lucide-react';
 
-const fmt = (n) =>
-  new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 // Campos de item de un grupo (todos iguales, la frecuencia es del grupo, no del item)
 const camposForFrecuencia = () => [
@@ -516,12 +515,12 @@ function UserTemplatesManager({ dbPath }) {
                   <span>{t.nombre}</span>
                 </div>
                 <div className="utm-card-stats">
-                  <span className="utm-stat-ing">${fmt(tot.ing)}</span>
-                  <span className="utm-stat-gas">${fmt(tot.gas)}</span>
+                  <span className="utm-stat-ing">{money(tot.ing)}</span>
+                  <span className="utm-stat-gas">{money(tot.gas)}</span>
                 </div>
                 {obj > 0 && (
                   <div className="utm-card-obj">
-                    <Target size={10} /> Obj: ${fmt(obj)}
+                    <Target size={10} /> Obj: {money(obj)}
                   </div>
                 )}
                 {selected === t.id && <ChevronRight size={12} className="utm-card-arrow" />}
@@ -624,15 +623,15 @@ function UserTemplatesManager({ dbPath }) {
             <div className="utm-resumen-pills">
               <div className="utm-pill utm-pill-ing">
                 <span className="utm-pill-lbl">Ingresos est.</span>
-                <span className="utm-pill-val">${fmt(totales.ing)}</span>
+                <span className="utm-pill-val">{money(totales.ing)}</span>
               </div>
               <div className="utm-pill utm-pill-gas">
                 <span className="utm-pill-lbl">Gastos est.</span>
-                <span className="utm-pill-val">${fmt(totales.gas)}</span>
+                <span className="utm-pill-val">{money(totales.gas)}</span>
               </div>
               <div className={`utm-pill ${ahorroEst >= 0 ? 'utm-pill-ok' : 'utm-pill-neg'}`}>
                 <span className="utm-pill-lbl">Ahorro est.</span>
-                <span className="utm-pill-val">{ahorroEst < 0 ? '-' : ''}${fmt(Math.abs(ahorroEst))}</span>
+                <span className="utm-pill-val">{ahorroEst < 0 ? '-' : ''}{money(Math.abs(ahorroEst))}</span>
               </div>
               {objetivo > 0 && (
                 <div className={`utm-pill ${ahorroEst >= objetivo ? 'utm-pill-ok' : 'utm-pill-warn'}`}>
@@ -657,7 +656,7 @@ function UserTemplatesManager({ dbPath }) {
                       <span className="utm-acc-label">Ingresos</span>
                       <span className="utm-acc-count">{items.length} ítems</span>
                     </div>
-                    <span className="utm-acc-total">${fmt(total)}</span>
+                    <span className="utm-acc-total">{money(total)}</span>
                   </button>
                   {isOpen && (
                     <div className="utm-acc-body">
@@ -691,7 +690,7 @@ function UserTemplatesManager({ dbPath }) {
                       <span className="dm-grupo-tipo">{frecLabel}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="utm-acc-total">${fmt(total)}/mes</span>
+                      <span className="utm-acc-total">{money(total)}/mes</span>
                       <button className="dm-del-row" title="Eliminar este grupo"
                         onClick={e => { e.stopPropagation(); setField('grupos_gastos', toArray(editing.grupos_gastos).filter((_, i) => i !== gIdx)); setDirty(true); }}
                       ><Trash2 size={11} /></button>
@@ -721,7 +720,9 @@ function UserTemplatesManager({ dbPath }) {
 }
 
 // â”€â”€ Componente principal con pestaÃ±as â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export default function DefaultsManager() {
+// Las plantillas globales (defaults/*) son las que se ofrecen a todos los usuarios
+// al crear un presupuesto: solo un admin puede editarlas (también lo exigen las reglas).
+export default function DefaultsManager({ esAdmin = false }) {
   const { user } = useAuth();
   const [tab, setTab] = useState('mias'); // 'mias' | 'globales'
 
@@ -733,15 +734,17 @@ export default function DefaultsManager() {
         <button className={`dm-tab ${tab === 'mias' ? 'active' : ''}`} onClick={() => setTab('mias')}>
           Mis Plantillas
         </button>
-        <button className={`dm-tab ${tab === 'globales' ? 'active' : ''}`} onClick={() => setTab('globales')}>
-          Plantillas Globales
-        </button>
+        {esAdmin && (
+          <button className={`dm-tab ${tab === 'globales' ? 'active' : ''}`} onClick={() => setTab('globales')}>
+            Plantillas Globales
+          </button>
+        )}
       </div>
 
       {tab === 'mias' && userDbPath && (
         <UserTemplatesManager key={userDbPath} dbPath={userDbPath} />
       )}
-      {tab === 'globales' && (
+      {tab === 'globales' && esAdmin && (
         <PlantillaPanel key="globales" dbPath="defaults" />
       )}
     </div>

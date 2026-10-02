@@ -2,10 +2,9 @@
 // Listado de los tickets aplicados en el mes (mesData.comprobantes).
 // Cada registro guarda lo que leyó la IA y a dónde fue cada item.
 import React, { useState } from 'react';
+import { money, money2 } from '../moneda';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
-const fmt  = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
-const fmt2 = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
 
 const fmtFecha = (iso) => {
   const d = new Date(iso);
@@ -31,7 +30,7 @@ function ComprobanteCard({ c, grupos, onEliminar }) {
             {!c.tarjetaNombre && <> · 💵 Efectivo</>}
           </span>
         </div>
-        <strong className="comp-total">${fmt(c.totalPagado)}</strong>
+        <strong className="comp-total">{money(c.totalPagado)}</strong>
         {abierto ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
 
@@ -53,8 +52,8 @@ function ComprobanteCard({ c, grupos, onEliminar }) {
                     <td>{it.nombre}</td>
                     <td className="num">{it.cantidad}</td>
                     <td className="num">
-                      {it.monto !== it.total && <span className="comp-original">${fmt2(it.total)}</span>}
-                      ${fmt2(it.monto)}
+                      {it.monto !== it.total && <span className="comp-original">{money2(it.total)}</span>}
+                      {money2(it.monto)}
                     </td>
                     <td>
                       {it.destino === 'ignorado' ? 'No registrado' : (
@@ -73,7 +72,7 @@ function ComprobanteCard({ c, grupos, onEliminar }) {
 
           <div className="comp-detalle">
             {c.descuentoRepartido && (
-              <div>Descuento de ${fmt2(c.totalItems - c.totalPagado)} repartido entre los items (suma del ticket ${fmt2(c.totalItems)}).</div>
+              <div>Descuento de {money2(c.totalItems - c.totalPagado)} repartido entre los items (suma del ticket {money2(c.totalItems)}).</div>
             )}
             {c.observaciones && <div className="comp-obs">{c.observaciones}</div>}
           </div>
@@ -121,7 +120,7 @@ export default function Comprobantes({ data = [], grupos = [], onEliminar }) {
         </div>
         <div className="ps-item teal">
           <span>Total pagado</span>
-          <strong>${fmt(total)}</strong>
+          <strong>{money(total)}</strong>
         </div>
       </div>
       {lista.map(c => (

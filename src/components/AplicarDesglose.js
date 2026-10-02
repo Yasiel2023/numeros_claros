@@ -1,12 +1,11 @@
 // src/components/AplicarDesglose.js
 import React, { useState, useMemo } from 'react';
+import { money, money2 } from '../moneda';
 import { AlertCircle, CheckCircle2, Loader, Camera } from 'lucide-react';
 import { toPeriodos, tarjetasDisponibles, saldoActualDebito } from './GrupoGastos';
 import { sugerirMatches } from '../ia';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
-const fmt2 = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
 
 const NUEVO    = '__nuevo__';
 const IGNORAR  = '__ignorar__';
@@ -200,8 +199,8 @@ export default function AplicarDesglose({
   return (
     <div className="desglose-modal">
       <div className="desglose-tienda">
-        {desglose.tienda || 'Comprobante'} · {desglose.items.length} items · ${fmt(sumaItems)}
-        {hayDescuento && ` · pagado $${fmt(totalPagado)}`}
+        {desglose.tienda || 'Comprobante'} · {desglose.items.length} items · {money(sumaItems)}
+        {hayDescuento && ` · pagado ${money(totalPagado)}`}
       </div>
 
       {hayDescuento && (
@@ -212,8 +211,8 @@ export default function AplicarDesglose({
             onChange={e => setRepartirDescuento(e.target.checked)}
           />
           <span>
-            Repartir el descuento de <strong>${fmt2(sumaItems - totalPagado)}</strong> entre los items
-            (se registra lo realmente pagado: ${fmt2(totalPagado)})
+            Repartir el descuento de <strong>{money2(sumaItems - totalPagado)}</strong> entre los items
+            (se registra lo realmente pagado: {money2(totalPagado)})
           </span>
         </label>
       )}
@@ -236,7 +235,7 @@ export default function AplicarDesglose({
           {tarjetas.map(t => (
             <option key={t.id} value={t.id}>
               {t.tipo === 'debito'
-                ? `🏧 ${t.nombre} (débito · saldo $${fmt(saldoActualDebito(t))})`
+                ? `🏧 ${t.nombre} (débito · saldo ${money(saldoActualDebito(t))})`
                 : `💳 ${t.nombre} (crédito)`}
             </option>
           ))}
@@ -248,8 +247,8 @@ export default function AplicarDesglose({
           return (
             <p className="desglose-paso-desc">
               {t?.tipo === 'debito'
-                ? `Se descontarán $${fmt(totalAsignado)} del saldo de ${t.nombre}.`
-                : `Se cargarán $${fmt(totalAsignado)} a la deuda de ${t?.nombre}.`}
+                ? `Se descontarán ${money(totalAsignado)} del saldo de ${t.nombre}.`
+                : `Se cargarán ${money(totalAsignado)} a la deuda de ${t?.nombre}.`}
               {' '}Los items quedan vinculados a la tarjeta: si después despagás o borrás uno, se revierte.
             </p>
           );
@@ -285,9 +284,9 @@ export default function AplicarDesglose({
                   </div>
                   <div className="desglose-item-precio">
                     {montos[idx] !== (item.total || 0) && (
-                      <span className="desglose-item-original">${fmt(item.total)}</span>
+                      <span className="desglose-item-original">{money(item.total)}</span>
                     )}
-                    ${fmt(montos[idx])}
+                    {money(montos[idx])}
                   </div>
                 </div>
 
@@ -335,8 +334,8 @@ export default function AplicarDesglose({
                     {a.destino === IGNORAR
                       ? 'No se registrará'
                       : a.destino === NUEVO
-                      ? `Se creará "${item.nombre}" con $${fmt(montos[idx])} en ${nombreGrupo(a.grupoId)}`
-                      : `Se cargará $${fmt(montos[idx])} en "${a.destino}" (${nombreGrupo(a.grupoId)})${a.destino === a.sugerido ? ' · sugerido por IA' : ''}`}
+                      ? `Se creará "${item.nombre}" con ${money(montos[idx])} en ${nombreGrupo(a.grupoId)}`
+                      : `Se cargará ${money(montos[idx])} en "${a.destino}" (${nombreGrupo(a.grupoId)})${a.destino === a.sugerido ? ' · sugerido por IA' : ''}`}
                   </div>
                 )}
               </div>

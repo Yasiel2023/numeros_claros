@@ -3,7 +3,6 @@ import React, { useRef, useState } from 'react';
 import { Camera, Trash2, AlertCircle, Loader, Image as ImageIcon } from 'lucide-react';
 import { desglosarComprobante } from '../ia';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 export default function FotoComprobante({ ia, onDesglose, loading: externalLoading }) {
   const camaraInputRef  = useRef(null);

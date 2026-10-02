@@ -1,8 +1,8 @@
 // src/components/Ingresos.js
 import React, { useState } from 'react';
+import { money, simbolo } from '../moneda';
 import { Plus, Trash2, Check, X } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 function IngresoRow({ item, onChange, onDelete, esFijo }) {
   return (
@@ -22,7 +22,7 @@ function IngresoRow({ item, onChange, onDelete, esFijo }) {
           placeholder="0" />
       </td>
       <td className={`diff-cell ${(item.real || 0) >= (item.previsto || 0) ? 'pos' : 'neg'}`}>
-        ${fmt((item.real || 0) - (item.previsto || 0))}
+        {money((item.real || 0) - (item.previsto || 0))}
       </td>
       {!esFijo && (
         <td>
@@ -71,7 +71,7 @@ export default function Ingresos({ data, onChange }) {
       {showAdd && (
         <div className="add-row-form">
           <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Nombre ingreso" className="add-input" />
-          <input type="number" value={newPrev} onChange={e => setNewPrev(e.target.value)} placeholder="Previsto $" className="add-input short" />
+          <input type="number" value={newPrev} onChange={e => setNewPrev(e.target.value)} placeholder={`Previsto ${simbolo()}`} className="add-input short" />
           <button className="btn-confirm" onClick={addItem}><Check size={14}/></button>
           <button className="btn-cancel" onClick={() => setShowAdd(false)}><X size={14}/></button>
         </div>
@@ -81,8 +81,8 @@ export default function Ingresos({ data, onChange }) {
         <thead>
           <tr>
             <th>Concepto</th>
-            <th>Previsto $</th>
-            <th>Real $</th>
+            <th>Previsto {simbolo()}</th>
+            <th>Real {simbolo()}</th>
             <th>Diferencia</th>
             <th></th>
           </tr>
@@ -97,9 +97,9 @@ export default function Ingresos({ data, onChange }) {
         <tfoot>
           <tr className="totals-row">
             <td>TOTAL</td>
-            <td className="total-val">${fmt(totalPrev)}</td>
-            <td className="total-val real-val">${fmt(totalReal)}</td>
-            <td className={`diff-cell ${totalReal >= totalPrev ? 'pos' : 'neg'}`}>${fmt(totalReal - totalPrev)}</td>
+            <td className="total-val">{money(totalPrev)}</td>
+            <td className="total-val real-val">{money(totalReal)}</td>
+            <td className={`diff-cell ${totalReal >= totalPrev ? 'pos' : 'neg'}`}>{money(totalReal - totalPrev)}</td>
             <td></td>
           </tr>
         </tfoot>

@@ -9,6 +9,7 @@ import { MESES_ES } from './constants';
 import { toPeriodos } from './components/GrupoGastos';
 import { idsCredito, cuentaComoGastoReal, pagadoTarjeta, saldoTarjeta, previstoPropioTarjeta } from './tarjetas';
 import { numeroCuota, estaActiva } from './financiaciones';
+import { MONEDAS, monedaPrincipal, monedaSecundaria, monedaDe, esSecundaria } from './moneda';
 
 const MAX_RONDAS = 4;      // máximo de idas y vueltas con herramientas por pregunta
 const MAX_MESES  = 12;     // máximo de meses por llamada a una herramienta
@@ -56,8 +57,14 @@ export function contextoAutomatico({ presupuestoNombre, grupos = [], año, mes, 
   const hoy = new Date();
   const freq = (g) => g.frecuencia || (g.tipo === 'semanas' ? 'semanal' : 'mensual');
 
-  return `Sos el asistente financiero de "Números Claros", una app de presupuesto familiar en Uruguay (moneda principal UYU, algunas tarjetas en USD).
-Presupuesto: ${presupuestoNombre || 'sin nombre'}
+  const P = monedaPrincipal();
+  const S = monedaSecundaria();
+  const descMoneda = S
+    ? `moneda principal ${P} (${MONEDAS[P]?.nombre}); algunas tarjetas y ahorros pueden estar en ${S} (${MONEDAS[S]?.nombre})`
+    : `moneda ${P} (${MONEDAS[P]?.nombre})`;
+
+  return `Sos el asistente financiero de "Números Claros", una app de presupuesto familiar.
+Presupuesto: ${presupuestoNombre || 'sin nombre'} — ${descMoneda}. Todos los montos sin moneda indicada están en ${P}.
 Fecha de hoy: ${hoy.toISOString().slice(0, 10)}
 Mes que el usuario está viendo: ${MESES_ES[mes]} ${año} (${mesIso(año, mes)})
 
@@ -81,10 +88,10 @@ CATEGORÍAS DE GASTOS ACTUALES
 ${grupos.map(g => `- ${g.nombre} (id: ${g.id}, ${freq(g)})`).join('\n') || '- (sin categorías)'}
 
 TARJETAS DEL MES QUE SE ESTÁ VIENDO
-${tarjetas.map(t => `- ${t.nombre}: ${t.tipo === 'debito' ? 'débito' : 'crédito'} en ${t.moneda || 'UYU'}`).join('\n') || '- (sin tarjetas)'}
+${tarjetas.map(t => `- ${t.nombre}: ${t.tipo === 'debito' ? 'débito' : 'crédito'} en ${monedaDe(t.moneda)}`).join('\n') || '- (sin tarjetas)'}
 
 COMPRAS EN CUOTAS
-${financiaciones.map(f => `- ${f.concepto}: ${f.cuotasTotales} cuotas de ${f.montoCuota} ${f.moneda || 'UYU'} en ${f.tarjetaNombre}`).join('\n') || '- (ninguna)'}
+${financiaciones.map(f => `- ${f.concepto}: ${f.cuotasTotales} cuotas de ${f.montoCuota} ${monedaDe(f.moneda)} en ${f.tarjetaNombre}`).join('\n') || '- (ninguna)'}
 
 CÓMO TRABAJAR
 - No inventes datos: usá las herramientas para obtener lo que necesites y pedí solo los meses necesarios.
@@ -279,8 +286,11 @@ function resumenDeMes(ctx, data) {
     };
   });
 
-  const porMoneda = (moneda) => credito.filter(t => (t.moneda || 'UYU') === moneda);
-  const tarjetasUYU = porMoneda('UYU');
+  // Tarjetas en la moneda principal (cuentan en los totales) y en la secundaria (informativas)
+  const tarjetasUYU = credito.filter(t => !esSecundaria(t.moneda));
+  const tarjetasSec = credito.filter(t => esSecundaria(t.moneda));
+  const P = monedaPrincipal();
+  const S = monedaSecundaria();
   const ingPrev = data.ingresos.reduce((s, i) => s + (i.previsto || 0), 0);
   const ingReal = data.ingresos.reduce((s, i) => s + (i.real || 0), 0);
   const gastoRealCategorias = categorias.reduce((s, c) => s + c.real, 0);
@@ -297,11 +307,11 @@ function resumenDeMes(ctx, data) {
     },
     gastos_por_categoria: categorias,
     tarjetas_credito: {
-      UYU: { deuda: r2(tarjetasUYU.reduce((s, t) => s + (t.monto || 0), 0)), pagado: r2(pagosTarjetasUYU), pendiente: r2(tarjetasUYU.reduce((s, t) => s + saldoTarjeta(t), 0)) },
-      USD: { deuda: r2(porMoneda('USD').reduce((s, t) => s + (t.monto || 0), 0)), pagado: r2(porMoneda('USD').reduce((s, t) => s + pagadoTarjeta(t), 0)), pendiente: r2(porMoneda('USD').reduce((s, t) => s + saldoTarjeta(t), 0)) },
+      [P]: { deuda: r2(tarjetasUYU.reduce((s, t) => s + (t.monto || 0), 0)), pagado: r2(pagosTarjetasUYU), pendiente: r2(tarjetasUYU.reduce((s, t) => s + saldoTarjeta(t), 0)) },
+      ...(S ? { [S]: { deuda: r2(tarjetasSec.reduce((s, t) => s + (t.monto || 0), 0)), pagado: r2(tarjetasSec.reduce((s, t) => s + pagadoTarjeta(t), 0)), pendiente: r2(tarjetasSec.reduce((s, t) => s + saldoTarjeta(t), 0)) } } : {}),
     },
     objetivo_ahorro: r2(data.objetivoAhorro),
-    totales_UYU: {
+    [`totales_${P}`]: {
       gasto_previsto: r2(gastoPrevisto),
       gasto_real: r2(gastoReal),
       pendiente: r2(categorias.reduce((s, c) => s + c.pendiente, 0) + tarjetasUYU.reduce((s, t) => s + saldoTarjeta(t), 0)),
@@ -453,13 +463,13 @@ const EJECUTORES = {
         if (t.tipo === 'debito') {
           const actual = t.saldos.length ? t.saldos[t.saldos.length - 1].monto : (t.saldoInicial || 0);
           return {
-            nombre: t.nombre, tipo: 'débito', moneda: t.moneda || 'UYU',
+            nombre: t.nombre, tipo: 'débito', moneda: monedaDe(t.moneda),
             saldo_inicial: r2(t.saldoInicial), saldo_actual: r2(actual),
             movimientos: t.saldos.map(s => ({ fecha: s.fecha, saldo_despues: r2(s.monto), nota: s.nota || '' })),
           };
         }
         return {
-          nombre: t.nombre, tipo: 'crédito', moneda: t.moneda || 'UYU',
+          nombre: t.nombre, tipo: 'crédito', moneda: monedaDe(t.moneda),
           deuda_del_mes: r2(t.monto), pagado: r2(pagadoTarjeta(t)), pendiente: r2(saldoTarjeta(t)),
           cuotas: t.cuotas.map(c => ({ concepto: c.concepto, cuota: `${c.numero}/${c.total}`, monto: r2(c.monto) })),
           gastos_cargados: items.filter(i => i.pagado === true && i.tarjetaId === t.id)
@@ -477,7 +487,7 @@ const EJECUTORES = {
       compras: ctx.financiaciones.map(f => {
         const n = numeroCuota(f, info.año, info.mes);
         return {
-          concepto: f.concepto, tarjeta: f.tarjetaNombre, moneda: f.moneda || 'UYU',
+          concepto: f.concepto, tarjeta: f.tarjetaNombre, moneda: monedaDe(f.moneda),
           monto_cuota: r2(f.montoCuota), cuotas_totales: f.cuotasTotales,
           inicio: mesIso(f.anioInicio, f.mesInicio),
           activa_este_mes: estaActiva(f, info.año, info.mes),

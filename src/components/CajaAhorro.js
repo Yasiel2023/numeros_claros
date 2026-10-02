@@ -1,9 +1,8 @@
 // src/components/CajaAhorro.js
 import React, { useState } from 'react';
+import { money, moneyDe, monedaPrincipal, monedaSecundaria } from '../moneda';
 import { Plus, Trash2, PiggyBank, DollarSign, RefreshCw, ArrowRightLeft } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
-const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 const fmtDate = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -18,6 +17,10 @@ const fmtDate = (iso) => {
 //   'ajuste_uyu'     — ajuste manual saldo UYU
 
 export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesLabel = '' }) {
+  // Campos *UYU = moneda principal del presupuesto; *USD = moneda secundaria
+  const P = monedaPrincipal();
+  const S = monedaSecundaria();   // '' si el presupuesto no tiene segunda moneda
+  const fmtUSD = (n) => moneyDe(n, S || P);
   const data = cajaData || { movimientos: [] };
   const movs = Array.isArray(data.movimientos) ? data.movimientos : [];
 
@@ -94,7 +97,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
     onChange({ ...data, movimientos: [...movs, {
       id: Date.now().toString(36), tipo: 'deposito_uyu',
       fecha: depFecha,
-      descripcion: depDesc || `Ahorro UYU ${mesLabel}`,
+      descripcion: depDesc || `Ahorro ${P} ${mesLabel}`,
       montoUYU: uyu,
     }]});
     setDepUYU(''); setDepDesc('');
@@ -108,7 +111,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
     onChange({ ...data, movimientos: [...movs, {
       id: Date.now().toString(36), tipo: 'ajuste_usd',
       fecha: new Date().toISOString().slice(0, 10),
-      descripcion: ajusteUSDDesc || 'Ajuste manual saldo USD',
+      descripcion: ajusteUSDDesc || `Ajuste manual saldo ${S}`,
       saldoUSD: usd,
     }]});
     setAjusteUSD(''); setAjusteUSDDesc('');
@@ -121,7 +124,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
     onChange({ ...data, movimientos: [...movs, {
       id: Date.now().toString(36), tipo: 'ajuste_uyu',
       fecha: new Date().toISOString().slice(0, 10),
-      descripcion: ajusteUYUDesc || 'Ajuste manual saldo UYU',
+      descripcion: ajusteUYUDesc || `Ajuste manual saldo ${P}`,
       saldoUYU: uyu,
     }]});
     setAjusteUYU(''); setAjusteUYUDesc('');
@@ -139,18 +142,20 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
 
       {/* ── CARDS SALDO ── */}
       <div className="caja-cards">
-        <div className="caja-card caja-card-usd">
-          <div className="caja-card-icon"><DollarSign size={22} /></div>
-          <div className="caja-card-body">
-            <span className="caja-card-label">Saldo cuenta USD</span>
-            <span className="caja-card-val">{fmtUSD(saldoUSDFinal)}</span>
+        {S && (
+          <div className="caja-card caja-card-usd">
+            <div className="caja-card-icon"><DollarSign size={22} /></div>
+            <div className="caja-card-body">
+              <span className="caja-card-label">Saldo cuenta {S}</span>
+              <span className="caja-card-val">{fmtUSD(saldoUSDFinal)}</span>
+            </div>
           </div>
-        </div>
+        )}
         <div className="caja-card caja-card-uyu">
           <div className="caja-card-icon"><PiggyBank size={22} /></div>
           <div className="caja-card-body">
-            <span className="caja-card-label">Saldo cuenta UYU</span>
-            <span className="caja-card-val">${fmt(saldoUYUFinal)}</span>
+            <span className="caja-card-label">Saldo cuenta {P}</span>
+            <span className="caja-card-val">{money(saldoUYUFinal)}</span>
           </div>
         </div>
         {ahorroRealMes > 0 && (
@@ -158,14 +163,16 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
             <div className="caja-card-icon"><RefreshCw size={22} /></div>
             <div className="caja-card-body">
               <span className="caja-card-label">Objetivo de ahorro</span>
-              <span className="caja-card-val pos">${fmt(ahorroRealMes)}</span>
+              <span className="caja-card-val pos">{money(ahorroRealMes)}</span>
               <div className="caja-obj-btns">
                 <button className="btn-obj-uyu" onClick={() => openForm('depuyu', ahorroRealMes)}>
-                  → Ahorrar en UYU
+                  → Ahorrar en {P}
                 </button>
-                <button className="btn-obj-usd" onClick={() => openForm('transf', ahorroRealMes)}>
-                  → Convertir a USD
-                </button>
+                {S && (
+                  <button className="btn-obj-usd" onClick={() => openForm('transf', ahorroRealMes)}>
+                    → Convertir a {S}
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -175,26 +182,30 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── ACCIONES ── */}
       <div className="caja-actions-row">
         <button className="btn-caja-action" onClick={() => openForm('depuyu')}>
-          <Plus size={13} /> Depositar en UYU
+          <Plus size={13} /> Depositar en {P}
         </button>
-        <button className="btn-caja-action btn-caja-transf" onClick={() => openForm('transf')}>
-          <ArrowRightLeft size={13} /> Convertir UYU → USD
-        </button>
+        {S && (
+          <button className="btn-caja-action btn-caja-transf" onClick={() => openForm('transf')}>
+            <ArrowRightLeft size={13} /> Convertir {P} → {S}
+          </button>
+        )}
         <button className="btn-caja-action btn-caja-ajuste" onClick={() => openForm('ajuste_uyu')}>
-          <RefreshCw size={13} /> Ajustar saldo UYU
+          <RefreshCw size={13} /> Ajustar saldo {P}
         </button>
-        <button className="btn-caja-action btn-caja-ajuste" onClick={() => openForm('ajuste_usd')}>
-          <RefreshCw size={13} /> Ajustar saldo USD
-        </button>
+        {S && (
+          <button className="btn-caja-action btn-caja-ajuste" onClick={() => openForm('ajuste_usd')}>
+            <RefreshCw size={13} /> Ajustar saldo {S}
+          </button>
+        )}
       </div>
 
       {/* ── FORM DEPÓSITO UYU ── */}
       {activeForm === 'depuyu' && (
         <div className="caja-form">
-          <h3 className="caja-form-title">🐷 Depositar ahorro en UYU</h3>
+          <h3 className="caja-form-title">🐷 Depositar ahorro en {P}</h3>
           <div className="caja-form-grid">
             <div className="caja-form-field">
-              <label>Monto UYU</label>
+              <label>Monto {P}</label>
               <input type="number" className="cell-input" min="0" placeholder="0"
                 value={depUYU} onChange={e => setDepUYU(e.target.value)} />
             </div>
@@ -221,21 +232,21 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM TRANSFERENCIA USD ── */}
       {activeForm === 'transf' && (
         <div className="caja-form">
-          <h3 className="caja-form-title">💸 Convertir UYU → USD</h3>
+          <h3 className="caja-form-title">💸 Convertir {P} → {S}</h3>
           <div className="caja-form-grid">
             <div className="caja-form-field">
-              <label>Monto UYU</label>
+              <label>Monto {P}</label>
               <input type="number" className="cell-input" min="0"
-                placeholder={ahorroRealMes > 0 ? fmt(ahorroRealMes) : '0'}
+                placeholder={ahorroRealMes > 0 ? String(Math.round(ahorroRealMes)) : '0'}
                 value={transfUYU} onChange={e => setTransfUYU(e.target.value)} />
               {ahorroRealMes > 0 && !transfUYU && (
                 <button className="btn-usar-ahorro" onClick={() => setTransfUYU(String(ahorroRealMes))}>
-                  Usar objetivo (${fmt(ahorroRealMes)})
+                  Usar objetivo ({money(ahorroRealMes)})
                 </button>
               )}
             </div>
             <div className="caja-form-field">
-              <label>Tasa UYU / USD</label>
+              <label>Tasa {P} / {S}</label>
               <input type="number" className="cell-input" min="0" step="0.01" placeholder="Ej: 42.50"
                 value={transfTasa} onChange={e => setTransfTasa(e.target.value)} />
             </div>
@@ -252,7 +263,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
           </div>
           {transfUYUNum > 0 && transfTasaNum > 0 && (
             <div className="caja-preview">
-              ${fmt(transfUYUNum)} UYU ÷ {transfTasaNum} = <strong>{fmtUSD(previewUSD)}</strong>
+              {money(transfUYUNum)} ÷ {transfTasaNum} = <strong>{fmtUSD(previewUSD)}</strong>
             </div>
           )}
           <div className="caja-form-btns">
@@ -268,11 +279,11 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM AJUSTE UYU ── */}
       {activeForm === 'ajuste_uyu' && (
         <div className="caja-form caja-form-ajuste">
-          <h3 className="caja-form-title">✏️ Ajuste manual saldo UYU</h3>
-          <p className="caja-form-hint">Saldo actual: <strong>${fmt(saldoUYUFinal)}</strong></p>
+          <h3 className="caja-form-title">✏️ Ajuste manual saldo {P}</h3>
+          <p className="caja-form-hint">Saldo actual: <strong>{money(saldoUYUFinal)}</strong></p>
           <div className="caja-form-grid">
             <div className="caja-form-field">
-              <label>Nuevo saldo UYU</label>
+              <label>Nuevo saldo {P}</label>
               <input type="number" className="cell-input" placeholder={String(saldoUYUFinal)}
                 value={ajusteUYU} onChange={e => setAjusteUYU(e.target.value)} />
             </div>
@@ -294,11 +305,11 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM AJUSTE USD ── */}
       {activeForm === 'ajuste_usd' && (
         <div className="caja-form caja-form-ajuste">
-          <h3 className="caja-form-title">✏️ Ajuste manual saldo USD</h3>
+          <h3 className="caja-form-title">✏️ Ajuste manual saldo {S}</h3>
           <p className="caja-form-hint">Saldo actual: <strong>{fmtUSD(saldoUSDFinal)}</strong></p>
           <div className="caja-form-grid">
             <div className="caja-form-field">
-              <label>Nuevo saldo USD</label>
+              <label>Nuevo saldo {S}</label>
               <input type="number" className="cell-input" step="0.01" placeholder={saldoUSDFinal.toFixed(2)}
                 value={ajusteUSD} onChange={e => setAjusteUSD(e.target.value)} />
             </div>
@@ -328,9 +339,9 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
               <th>Fecha</th>
               <th>Descripción</th>
               <th>Tipo</th>
-              <th>UYU</th>
+              <th>{P}</th>
               <th>Tasa</th>
-              <th>USD</th>
+              <th>{S || '—'}</th>
               <th style={{ width: 32 }}></th>
             </tr>
           </thead>
@@ -341,13 +352,13 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
                 <td>{m.descripcion}</td>
                 <td>
                   <span className={`pend-tipo ${m.tipo === 'transferencia' ? 'tipo-bas' : m.tipo === 'deposito_uyu' ? 'tipo-imp' : 'tipo-tarj'}`}>
-                    {m.tipo === 'transferencia' ? 'UYU→USD'
-                      : m.tipo === 'deposito_uyu' ? 'depósito UYU'
-                      : m.tipo === 'ajuste_uyu' ? 'ajuste UYU'
-                      : 'ajuste USD'}
+                    {m.tipo === 'transferencia' ? `${P}→${S}`
+                      : m.tipo === 'deposito_uyu' ? `depósito ${P}`
+                      : m.tipo === 'ajuste_uyu' ? `ajuste ${P}`
+                      : `ajuste ${S}`}
                   </span>
                 </td>
-                <td>{(m.tipo === 'transferencia' || m.tipo === 'deposito_uyu') ? `$${fmt(m.montoUYU)}` : m.tipo === 'ajuste_uyu' ? `→ $${fmt(m.saldoUYU)}` : '—'}</td>
+                <td>{(m.tipo === 'transferencia' || m.tipo === 'deposito_uyu') ? `${money(m.montoUYU)}` : m.tipo === 'ajuste_uyu' ? `→ ${money(m.saldoUYU)}` : '—'}</td>
                 <td>{m.tipo === 'transferencia' ? m.tasa : '—'}</td>
                 <td className="pos">
                   {m.tipo === 'transferencia' ? fmtUSD(m.montoUSD)

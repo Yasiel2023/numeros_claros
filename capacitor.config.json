@@ -1,0 +1,14 @@
+{
+  "appId": "uy.numerosclaros.app",
+  "appName": "Números Claros",
+  "webDir": "build",
+  "android": {
+    "backgroundColor": "#ffffff"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "native",
+      "initialViewportFitValueHint": "contain"
+    }
+  }
+}

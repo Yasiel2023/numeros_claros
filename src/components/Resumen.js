@@ -1,10 +1,9 @@
 // src/components/Resumen.js
 import React from 'react';
+import { money, moneyDe, esSecundaria, simbolo } from '../moneda';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { pagadoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
-const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
 
 export default function Resumen({ mesData, onChange, grupos = [] }) {
   if (!mesData) return null;
@@ -34,9 +33,9 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
 
   // ── Tarjetas (una fila por tarjeta de credito) ────────────────
   const credito = tarjetas.filter(t => t.tipo !== 'debito' && (t.monto || 0) > 0);
-  const totalTarjetasPrevUYU = credito.filter(t => t.moneda === 'UYU')
+  const totalTarjetasPrevUYU = credito.filter(t => !esSecundaria(t.moneda))
     .reduce((s, t) => s + previstoPropioTarjeta(t, gastos), 0);
-  const totalTarjetasRealUYU = credito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + pagadoTarjeta(t), 0);
+  const totalTarjetasRealUYU = credito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + pagadoTarjeta(t), 0);
 
   // ── Totales ───────────────────────────────────────────────────
   const totalGastosPrev = gruposData.reduce((s, g) => s + g.prev, 0) + totalTarjetasPrevUYU + objetivoAhorro;
@@ -53,7 +52,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
       prev: g.prev,
       real: g.real,
     })),
-    ...credito.filter(t => t.moneda === 'UYU').map(t => ({
+    ...credito.filter(t => !esSecundaria(t.moneda)).map(t => ({
       name: `💳 ${t.nombre}`,
       prev: previstoPropioTarjeta(t, gastos),
       real: pagadoTarjeta(t),
@@ -71,40 +70,40 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
         <div className="resumen-table-wrap">
           <table className="data-table resumen-table">
             <thead>
-              <tr><th>Concepto</th><th>Presupuestado $</th><th>Real pagado $</th><th>%</th></tr>
+              <tr><th>Concepto</th><th>Presupuestado {simbolo()}</th><th>Real pagado {simbolo()}</th><th>%</th></tr>
             </thead>
             <tbody>
               <tr className="row-ingreso">
                 <td>💼 Ingresos</td>
-                <td className="total-val pos">${fmt(totalIngPrev)}</td>
-                <td className="total-val pos">${fmt(totalIngReal)}</td>
+                <td className="total-val pos">{money(totalIngPrev)}</td>
+                <td className="total-val pos">{money(totalIngReal)}</td>
                 <td>—</td>
               </tr>
               {gruposData.map(g => (
                 <tr key={g.id}>
                   <td>{g.icono ? `${g.icono} ` : ''}{g.nombre}</td>
-                  <td>${fmt(g.prev)}</td>
-                  <td className={g.real > 0 ? 'neg' : ''}>${fmt(g.real)}</td>
+                  <td>{money(g.prev)}</td>
+                  <td className={g.real > 0 ? 'neg' : ''}>{money(g.real)}</td>
                   <td>{totalIngPrev > 0 ? Math.round(g.prev / totalIngPrev * 100) : 0}%</td>
                 </tr>
               ))}
               {credito.map(t => {
-                const esUSD  = t.moneda === 'USD';
-                const money  = (v) => esUSD ? fmtUSD(v) : `$${fmt(v)}`;
+                const esUSD  = esSecundaria(t.moneda);   // tarjeta en la moneda secundaria
+                const montoT = (v) => moneyDe(v, esUSD ? t.moneda : undefined);
                 const pag    = pagadoTarjeta(t);
                 const propio = previstoPropioTarjeta(t, gastos);
                 return (
                   <tr key={t.id || t.nombre}>
                     <td>
-                      💳 {t.nombre}{esUSD && <span className="badge-fijo">USD</span>}
+                      💳 {t.nombre}{esUSD && <span className="badge-fijo">{t.moneda}</span>}
                       {propio < (t.monto || 0) && (
                         <span className="resumen-nota-tarjeta">
-                          deuda {money(t.monto || 0)} — el resto ya está en sus grupos
+                          deuda {montoT(t.monto || 0)} — el resto ya está en sus grupos
                         </span>
                       )}
                     </td>
-                    <td>{money(propio)}</td>
-                    <td className={pag > 0 ? 'neg' : ''}>{money(pag)}</td>
+                    <td>{montoT(propio)}</td>
+                    <td className={pag > 0 ? 'neg' : ''}>{montoT(pag)}</td>
                     <td>{!esUSD && totalIngPrev > 0 ? Math.round(propio / totalIngPrev * 100) : '—'}</td>
                   </tr>
                 );
@@ -119,15 +118,15 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
                       onChange={e => onChange({ ...mesData, objetivoAhorro: parseFloat(e.target.value) || 0 })}
                     />
                   </td>
-                  <td className="neg">${fmt(objetivoAhorro)}</td>
-                  <td className="neg">${fmt(objetivoAhorro)}</td>
+                  <td className="neg">{money(objetivoAhorro)}</td>
+                  <td className="neg">{money(objetivoAhorro)}</td>
                   <td>{totalIngPrev > 0 ? Math.round(objetivoAhorro / totalIngPrev * 100) : 0}%</td>
                 </tr>
               )}
               <tr className="totals-row">
                 <td>TOTAL GASTOS</td>
-                <td className="neg">${fmt(totalGastosPrev)}</td>
-                <td className={totalGastosReal > 0 ? 'neg' : 'pos'}>${fmt(totalGastosReal)}</td>
+                <td className="neg">{money(totalGastosPrev)}</td>
+                <td className={totalGastosReal > 0 ? 'neg' : 'pos'}>{money(totalGastosReal)}</td>
                 <td>{saldoPct}%</td>
               </tr>
             </tbody>
@@ -143,7 +142,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
                 angle={-30} textAnchor="end" interval={0} />
               <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                 tickFormatter={n => Math.abs(n) >= 1000 ? `${(n/1000).toFixed(0)}K` : n} />
-              <Tooltip formatter={(v) => `$${fmt(v)}`}
+              <Tooltip formatter={(v) => `${money(v)}`}
                 contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, fontSize: 12 }} />
               <Bar dataKey="prev" name="Presupuestado" fill="#94a3b8" radius={[3,3,0,0]} maxBarSize={20} />
               <Bar dataKey="real" name="Real pagado" radius={[3,3,0,0]} maxBarSize={20}>
@@ -165,15 +164,15 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
             <div className="saldo-col-title">Presupuestado</div>
             <div className="saldo-row">
               <span>Ingresos</span>
-              <span className="pos">${fmt(totalIngPrev)}</span>
+              <span className="pos">{money(totalIngPrev)}</span>
             </div>
             <div className="saldo-row">
               <span>Gastos</span>
-              <span className="neg">${fmt(totalGastosPrev)}</span>
+              <span className="neg">{money(totalGastosPrev)}</span>
             </div>
             <div className="saldo-row saldo-libre-row">
               <span>Saldo libre</span>
-              <span className={saldoLibrePrev >= 0 ? 'pos' : 'neg'}>${fmt(saldoLibrePrev)}</span>
+              <span className={saldoLibrePrev >= 0 ? 'pos' : 'neg'}>{money(saldoLibrePrev)}</span>
             </div>
           </div>
 
@@ -182,15 +181,15 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
             <div className="saldo-col-title">Real</div>
             <div className="saldo-row">
               <span>Ingresos</span>
-              <span className="pos">${fmt(totalIngReal)}</span>
+              <span className="pos">{money(totalIngReal)}</span>
             </div>
             <div className="saldo-row">
               <span>Gastos pagados</span>
-              <span className="neg">${fmt(totalGastosReal)}</span>
+              <span className="neg">{money(totalGastosReal)}</span>
             </div>
             <div className="saldo-row saldo-libre-row">
               <span>Saldo libre</span>
-              <span className={saldoLibreReal >= 0 ? 'pos' : 'neg'}>${fmt(saldoLibreReal)}</span>
+              <span className={saldoLibreReal >= 0 ? 'pos' : 'neg'}>{money(saldoLibreReal)}</span>
             </div>
           </div>
         </div>

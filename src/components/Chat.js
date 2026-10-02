@@ -298,7 +298,7 @@ export default function Chat({
           className="chat-btn-enviar"
           onClick={hacerPregunta}
           disabled={loading || !pregunta.trim() || !apiKey}
-          title={!apiKey ? 'Configura tu API key en ⚙️ Configuración primero' : ''}
+          title={!apiKey ? 'La IA todavía no está configurada' : ''}
         >
           <Send size={18} />
         </button>
@@ -306,7 +306,7 @@ export default function Chat({
 
       {!apiKey && (
         <div className="chat-nota">
-          ⚙️ Necesitas configurar tu API key de Groq en Configuración para usar este chat.
+          ⚙️ La IA todavía no está configurada. Pedile al administrador de la app que la active.
         </div>
       )}
     </div>

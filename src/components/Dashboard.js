@@ -1,11 +1,9 @@
-﻿// src/components/Dashboard.js
+// src/components/Dashboard.js
 import React from 'react';
+import { money, moneyDe, esSecundaria, monedaSecundaria } from '../moneda';
 import { AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Wallet, DollarSign, Target } from 'lucide-react';
 import { MESES_ES } from '../constants';
 import { pagadoTarjeta, saldoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
-
-const fmt    = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
-const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0);
 
 export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   if (!mesData) return <div className="loading-state">Cargando...</div>;
@@ -41,11 +39,11 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   // ── Tarjetas ──────────────────────────────────────────────────
   const soloCredito = tarjetas.filter(t => t.tipo !== 'debito');
   // Previsto propio: cuotas + cargos. Los gastos cargados ya estan previstos en su grupo.
-  const totalTarjetasPrevUYU = soloCredito.filter(t => t.moneda === 'UYU')
+  const totalTarjetasPrevUYU = soloCredito.filter(t => !esSecundaria(t.moneda))
     .reduce((s, t) => s + previstoPropioTarjeta(t, gastos), 0);
-  const totalTarjetasRealUYU = soloCredito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + pagadoTarjeta(t), 0);
-  const totalTarjetasPendUYU = soloCredito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + saldoTarjeta(t), 0);
-  const totalTarjetasPendUSD = soloCredito.filter(t => t.moneda === 'USD').reduce((s, t) => s + saldoTarjeta(t), 0);
+  const totalTarjetasRealUYU = soloCredito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + pagadoTarjeta(t), 0);
+  const totalTarjetasPendUYU = soloCredito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
+  const totalTarjetasPendUSD = soloCredito.filter(t => esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
   const tarjetasPend         = soloCredito.filter(t => saldoTarjeta(t) > 0);
 
   // ── Totales (objetivo como gasto, igual que en Resumen) ──────
@@ -85,8 +83,8 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="dc-icon"><TrendingUp size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Ingresos</span>
-            <span className="dc-val">${fmt(totalIngReal)}</span>
-            <span className="dc-sub">Previsto: ${fmt(totalIngPrev)}</span>
+            <span className="dc-val">{money(totalIngReal)}</span>
+            <span className="dc-sub">Previsto: {money(totalIngPrev)}</span>
           </div>
         </div>
 
@@ -94,8 +92,8 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="dc-icon"><TrendingDown size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Gastos previstos</span>
-            <span className="dc-val">${fmt(totalGastosPrev)}</span>
-            <span className="dc-sub">Real pagado: ${fmt(totalGastosReal)}</span>
+            <span className="dc-val">{money(totalGastosPrev)}</span>
+            <span className="dc-sub">Real pagado: {money(totalGastosReal)}</span>
           </div>
         </div>
 
@@ -103,8 +101,8 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="dc-icon"><Wallet size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Saldo libre</span>
-            <span className="dc-val">${fmt(saldoLibreReal)}</span>
-            <span className="dc-sub">Presupuestado: ${fmt(saldoLibrePrev)}</span>
+            <span className="dc-val">{money(saldoLibreReal)}</span>
+            <span className="dc-sub">Presupuestado: {money(saldoLibrePrev)}</span>
           </div>
         </div>
 
@@ -112,9 +110,9 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="dc-icon"><DollarSign size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Tarjetas pendientes</span>
-            <span className="dc-val">${fmt(totalTarjetasPendUYU)}</span>
+            <span className="dc-val">{money(totalTarjetasPendUYU)}</span>
             {totalTarjetasPendUSD > 0
-              ? <span className="dc-sub">+ {fmtUSD(totalTarjetasPendUSD)}</span>
+              ? <span className="dc-sub">+ {moneyDe(totalTarjetasPendUSD, monedaSecundaria())}</span>
               : <span className="dc-sub">{tarjetasPend.length} de {soloCredito.length} pendiente{tarjetasPend.length !== 1 ? 's' : ''}</span>
             }
           </div>
@@ -131,7 +129,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
             <h2 className="card-title">
               <AlertTriangle size={16} className="icon-warn"/> Pagos pendientes
             </h2>
-            <span className="badge-red">${fmt(totalPendiente)}</span>
+            <span className="badge-red">{money(totalPendiente)}</span>
           </div>
 
           {pendItems.length === 0 ? (
@@ -151,7 +149,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
                   </div>
                   <div className="pend-montos">
                     <span className="pend-real">
-                      {item.moneda === 'USD' ? fmtUSD(item.previsto) : `$${fmt(item.previsto)}`}
+                      {moneyDe(item.previsto, item.moneda)}
                     </span>
                   </div>
                 </div>
@@ -176,7 +174,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
         <div className="card">
           <div className="card-header-row">
             <h2 className="card-title">📂 Avance por grupos</h2>
-            <span className="badge-teal">${fmt(gruposResumen.reduce((s, g) => s + g.real, 0))}</span>
+            <span className="badge-teal">{money(gruposResumen.reduce((s, g) => s + g.real, 0))}</span>
           </div>
           <div className="sem-resumen">
             {gruposResumen.length === 0 ? (
@@ -187,7 +185,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
                 <div className="sem-info">
                   <span className="sem-label">{grupo.icono ? `${grupo.icono} ` : ''}{grupo.nombre}</span>
                   <span className="sem-monto">
-                    ${fmt(real)} <small style={{ color: '#94a3b8' }}>/ ${fmt(previsto)}</small>
+                    {money(real)} <small style={{ color: '#94a3b8' }}>/ {money(previsto)}</small>
                   </span>
                 </div>
                 <div className="progress-bar">
@@ -208,7 +206,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
                   <div className="sem-info">
                     <span className="sem-label">💳 Tarjetas</span>
                     <span className="sem-monto">
-                      ${fmt(totalTarjetasRealUYU)} <small style={{ color: '#94a3b8' }}>/ ${fmt(totalTarjetasPrevUYU)}</small>
+                      {money(totalTarjetasRealUYU)} <small style={{ color: '#94a3b8' }}>/ {money(totalTarjetasPrevUYU)}</small>
                     </span>
                   </div>
                   <div className="progress-bar">
@@ -240,23 +238,23 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="ahorro-nums">
             <div>
               <span className="an-label">Separado para ahorro</span>
-              <span className={`an-val ${ahorroNeto >= 0 ? 'green' : 'orange'}`}>${fmt(ahorroNeto)}</span>
+              <span className={`an-val ${ahorroNeto >= 0 ? 'green' : 'orange'}`}>{money(ahorroNeto)}</span>
             </div>
             {objetivoAhorro > 0 ? (
               <>
                 <div>
                   <span className="an-label">Objetivo del mes</span>
-                  <span className="an-val">${fmt(objetivoAhorro)}</span>
+                  <span className="an-val">{money(objetivoAhorro)}</span>
                 </div>
                 <div>
                   <span className="an-label">{ahorroNeto >= objetivoAhorro ? '✓ Superado en' : 'Faltan'}</span>
                   <span className={`an-val ${ahorroNeto >= objetivoAhorro ? 'green' : 'orange'}`}>
-                    ${fmt(Math.abs(objetivoAhorro - ahorroNeto))}
+                    {money(Math.abs(objetivoAhorro - ahorroNeto))}
                   </span>
                 </div>
                 <div>
                   <span className="an-label">💵 Saldo libre</span>
-                  <span className={`an-val ${saldoLibreReal >= 0 ? 'green' : 'orange'}`}>${fmt(saldoLibreReal)}</span>
+                  <span className={`an-val ${saldoLibreReal >= 0 ? 'green' : 'orange'}`}>{money(saldoLibreReal)}</span>
                 </div>
               </>
             ) : (

@@ -212,7 +212,9 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .logout-btn:hover { color: var(--red); border-color: var(--red); background: var(--red-l); }
 
 /* ─── MAIN ───────────────────────────────────────────────────── */
-.main-wrap { flex: 1; display: flex; flex-direction: column; min-height: 100vh; overflow: hidden; }
+/* La columna ocupa exactamente la pantalla: la topbar queda fija y solo
+   scrollea .main-content (100dvh evita saltos con la barra del navegador móvil) */
+.main-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
 
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); height: var(--topbar-h); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; }
 .topbar-left { display: flex; align-items: center; gap: 10px; }
@@ -223,7 +225,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .save-status.saving { color: var(--orange); }
 .save-status.saved { color: var(--teal); }
 
-.main-content { flex: 1; padding: 24px; overflow-y: auto; width: 100%; }
+.main-content { flex: 1; min-height: 0; padding: 24px; overflow-y: auto; width: 100%; -webkit-overflow-scrolling: touch; }
 
 .loading-state { display: flex; align-items: center; justify-content: center; gap: 10px; height: 200px; color: var(--text2); font-size: 15px; }
 .spin { animation: spin 1s linear infinite; }
@@ -262,6 +264,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .card-title { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
 .card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+/* Los hijos de grillas pueden achicarse: si no, su contenido ensancha la página en el celular */
+.section-grid > *, .dash-cards > * { min-width: 0; }
 
 /* Badges */
 .badge-red { background: var(--red-l); color: var(--red); border: 1px solid #fecaca; padding: 2px 10px; border-radius: 20px; font-size: 13px; font-weight: 700; font-family: var(--mono); }
@@ -283,7 +287,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .pend-montos { display: flex; align-items: baseline; gap: 4px; }
 .pend-real { font-size: 14px; font-weight: 700; color: var(--red); font-family: var(--mono); }
 .pend-prev { font-size: 11px; color: var(--text3); font-family: var(--mono); }
-.pend-actions { display: flex; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border2); }
+.pend-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border2); }
 
 /* ─── SEMANAS RESUMEN ────────────────────────────────────────── */
 .sem-resumen { display: flex; flex-direction: column; gap: 10px; }
@@ -301,7 +305,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 
 /* ─── AHORRO CARD ────────────────────────────────────────────── */
 .ahorro-body { display: flex; flex-direction: column; gap: 12px; }
-.ahorro-nums { display: flex; gap: 32px; }
+.ahorro-nums { display: flex; flex-wrap: wrap; gap: 14px 32px; }
 .an-label { font-size: 11px; color: var(--text3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
 .an-val { font-size: 18px; font-weight: 700; font-family: var(--mono); }
 .an-val.green { color: var(--green); }
@@ -932,6 +936,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   .topbar-menu-btn { display: flex; }
   .dash-cards { grid-template-columns: 1fr; }
   .main-content { padding: 14px; }
+
+  /* ── Dashboard en celular ── */
+  .card { padding: 14px; }
+  .card-header-row { gap: 8px; }
+  .pend-info { min-width: 0; flex-wrap: wrap; gap: 4px 8px; }
+  .pend-name { overflow-wrap: anywhere; }
+  .pend-item { gap: 8px; }
+  .pend-montos { flex-shrink: 0; }
+  /* Avance por grupos: nombre y monto arriba, barra y % abajo */
+  .sem-row { flex-wrap: wrap; row-gap: 4px; }
+  .sem-info { width: 100%; gap: 8px; }
+  .ahorro-nums > div { flex: 1 1 40%; }
   .dm-wrap { flex-direction: column; }
   .dm-left { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
 
@@ -1484,17 +1500,20 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .utm-acc-body .dm-section-header { padding: 6px 16px 4px; }
 
 /* ── OnboardingWizard ───────────────────────────────────────── */
+/* Scrollea si el contenido es más alto que la pantalla. Los márgenes auto del
+   indicador y de la tarjeta lo centran cuando entra, y lo alinean arriba cuando no. */
 .ob-overlay {
   position: fixed; inset: 0;
   background: rgba(15,23,42,.55);
   backdrop-filter: blur(4px);
   display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  z-index: 1000; padding: 24px;
+  align-items: center;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  z-index: 1000; padding: 24px 16px;
 }
 .ob-progress {
   display: flex; align-items: center; gap: 0;
-  margin-bottom: 20px;
+  margin-top: auto; margin-bottom: 20px; flex-shrink: 0;
 }
 .ob-progress-step {
   width: 32px; height: 32px; border-radius: 50%;
@@ -1517,7 +1536,61 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
   box-shadow: var(--shadow-md);
   width: 100%; max-width: 500px;
   padding: 36px 32px;
+  margin-bottom: auto; flex-shrink: 0;
 }
+@media (max-width: 480px) {
+  .ob-card { padding: 24px 18px; }
+}
+.presup-moneda-btn { font-size: 11px; font-weight: 800; min-width: 26px; }
+.presup-moneda-aviso { font-size: 12.5px; color: var(--text2); line-height: 1.45; margin: 0 0 12px; padding: 8px 10px; background: #fef3c7; border-radius: 8px; }
+
+/* Selector de monedas (onboarding, nuevo presupuesto, cambio de moneda) */
+.sel-monedas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.sel-monedas-campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .3px; }
+.sel-monedas-campo small { text-transform: none; font-weight: 500; letter-spacing: 0; }
+.sel-monedas-campo select { padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-family: var(--font); font-size: 14px; color: var(--text); background: var(--surface); text-transform: none; font-weight: 500; letter-spacing: 0; }
+@media (max-width: 480px) { .sel-monedas { grid-template-columns: 1fr; } }
+
+/* Paso 0: sin indicador de pasos, la tarjeta se centra sola */
+.ob-card-inicio { margin-top: auto; }
+.ob-inicio-opciones { display: flex; flex-direction: column; gap: 12px; }
+.ob-inicio-opcion {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; border-radius: 12px; text-align: left;
+  background: var(--bg); border: 1.5px solid var(--border);
+  font-family: var(--font); color: var(--text); cursor: pointer; transition: border-color .15s, background .15s;
+}
+.ob-inicio-opcion:hover:not(:disabled) { border-color: var(--teal); }
+.ob-inicio-icono { font-size: 26px; flex-shrink: 0; }
+.ob-inicio-texto { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.ob-inicio-texto strong { font-size: 15px; }
+.ob-inicio-texto small { font-size: 12.5px; color: var(--text2); line-height: 1.4; }
+.ob-inicio-ia { flex-direction: column; align-items: stretch; padding: 0; cursor: default; border-color: #c4b5fd; background: #faf5ff; }
+.ob-inicio-ia.abierta { border-color: #7c3aed; }
+.ob-inicio-opcion-head {
+  display: flex; align-items: center; gap: 14px; width: 100%;
+  padding: 14px 16px; background: none; border: none; text-align: left;
+  font-family: var(--font); color: var(--text); cursor: pointer;
+}
+.ob-rot90 { transform: rotate(90deg); transition: transform .15s; }
+.ob-ia-form { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 16px; }
+.ob-ia-texto { resize: vertical; font-size: 14px !important; line-height: 1.45; background: #fff !important; }
+.ob-ia-foto-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--text2); }
+.ob-ia-foto-btns span { flex-basis: 100%; }
+.ob-ia-foto-btns .ob-btn-secondary { padding: 7px 12px; font-size: 13px; }
+.ob-ia-foto { position: relative; align-self: flex-start; }
+.ob-ia-foto img { max-height: 140px; max-width: 100%; border-radius: 8px; border: 1px solid var(--border); display: block; }
+.ob-ia-foto .ob-grupo-del { position: absolute; top: 4px; right: 4px; background: #fff; }
+.ob-ia-error { margin: 0; font-size: 13px; color: var(--red); }
+.ob-ia-armar { justify-content: center; background: #7c3aed; }
+.ob-ia-armar:hover:not(:disabled) { background: #6d28d9 !important; }
+.ob-aviso-ia {
+  display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px;
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45;
+  background: #faf5ff; border: 1px solid #e9d5ff; color: var(--text);
+}
+.ob-aviso-notas { color: var(--text2); font-style: italic; }
+.ob-link { align-self: flex-start; background: none; border: none; padding: 0; color: #6d28d9; font-weight: 600; font-size: 12.5px; cursor: pointer; text-decoration: underline; font-family: var(--font); }
 .ob-step { display: flex; flex-direction: column; gap: 0; }
 .ob-step-icon { font-size: 40px; text-align: center; margin-bottom: 10px; }
 .ob-step-title {
@@ -1572,8 +1645,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ob-grupos-list {
   display: flex; flex-direction: column; gap: 6px;
   margin-bottom: 20px;
-  max-height: 300px; overflow-y: auto;
-  padding-right: 4px;
 }
 .ob-grupo-row {
   display: flex; align-items: center; gap: 8px;
@@ -1784,7 +1855,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .ob-items-table tr:hover td { background: var(--bg); }
 .ob-add-item-row {
   display: flex; gap: 6px; align-items: center;
-  margin-top: 8px;
+  margin-bottom: 12px; padding: 10px; border-radius: 8px;
+  background: var(--teal-l); border: 1px dashed var(--teal);
 }
 .ob-input-sm { padding: 7px 10px !important; font-size: 13px !important; }
 .ob-input-num { max-width: 110px; }

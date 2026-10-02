@@ -1,6 +1,6 @@
 ﻿// src/App.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { ref, get, set, remove } from 'firebase/database';
+import { ref, get, set, remove, update } from 'firebase/database';
 // encodeEmail: '.' → ',' para claves RTDB
 const encodeEmail = (email) => email.replace(/\./g, ',');
 import { db } from './firebase';
@@ -24,6 +24,8 @@ import OnboardingWizard from './components/OnboardingWizard';
 import Config from './components/Config';
 import FlujoDesglose from './components/FlujoDesglose';
 import Comprobantes from './components/Comprobantes';
+import SelectorMonedas from './components/SelectorMonedas';
+import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS } from './moneda';
 import Chat from './components/Chat';
 import './App.css';
 
@@ -153,6 +155,14 @@ function AppInterna() {
   const [loadingPresup, setLoadingPresup] = useState(true);
   const [showNuevoModal, setShowNuevoModal] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevasMonedas, setNuevasMonedas] = useState({ moneda: MONEDA_DEFAULT, moneda2: MONEDA2_DEFAULT });
+  // Monedas del presupuesto activo. configurarMonedas() se llama en cada render para
+  // que todos los componentes formateen con ellas (ver src/moneda.js).
+  const [monedasActivas, setMonedasActivas] = useState({ principal: MONEDA_DEFAULT, secundaria: MONEDA2_DEFAULT });
+  configurarMonedas(monedasActivas.principal, monedasActivas.secundaria);
+  const [showMonedaModal, setShowMonedaModal] = useState(false);
+  const [monedaEdit, setMonedaEdit] = useState(null);       // { moneda, moneda2 } en edición
+  const [guardandoMoneda, setGuardandoMoneda] = useState(false);
   const [templateSeleccionado, setTemplateSeleccionado] = useState('');
   const [creando, setCreando] = useState(false);
   // ── Plantillas globales (colección /defaults en RTDB) ────────
@@ -199,7 +209,8 @@ function AppInterna() {
       emoji:   g.icono || null,
       grupoId: g.id,
     })),
-    ...NAV_FIJOS_FIN,
+    // Configuración (clave de IA del sistema) solo para admins
+    ...NAV_FIJOS_FIN.filter(n => n.key !== 'config' || admins?.[user?.uid] === true),
   ];
 
   // Clave del mes en RTDB: "2026_2" (año_mesIndex0basado)
@@ -223,22 +234,29 @@ function AppInterna() {
   }, []);
 
   // ── Cargar configuración de Groq ──────────────────────────
-  useEffect(() => {
+  // La clave es una sola para todo el sistema (sistema/ia, la carga el admin).
+  // Si todavía no existe, se usa la clave propia del usuario (config/{uid}), si tiene.
+  const cargarGroqConfig = useCallback(async () => {
     if (!user?.uid) return;
-    const cargarGroqConfig = async () => {
+    const leer = async (ruta) => {
       try {
-        const snapKey = await get(ref(db, `config/${user.uid}/groq_api_key`));
-        setGroqApiKey(snapKey.exists() ? snapKey.val() : '');
-        const snapUrl = await get(ref(db, `config/${user.uid}/groq_url`));
-        if (snapUrl.exists()) setGroqUrl(snapUrl.val());
-        const snapModel = await get(ref(db, `config/${user.uid}/groq_model`));
-        if (snapModel.exists()) setGroqModel(snapModel.val());
+        const snap = await get(ref(db, ruta));
+        return snap.exists() ? snap.val() : null;
       } catch (e) {
-        console.error('Error cargando configuración de Groq:', e);
+        console.error(`Error leyendo ${ruta}:`, e);
+        return null;
       }
     };
-    cargarGroqConfig();
+    const global = await leer('sistema/ia');
+    const cfg = global?.groq_api_key ? global : await leer(`config/${user.uid}`);
+    setGroqApiKey(cfg?.groq_api_key || '');
+    if (cfg?.groq_url) setGroqUrl(cfg.groq_url);
+    if (cfg?.groq_model) setGroqModel(cfg.groq_model);
   }, [user?.uid]);
+
+  useEffect(() => { cargarGroqConfig(); }, [cargarGroqConfig]);
+
+  const esAdmin = admins?.[user?.uid] === true;
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
   useEffect(() => {
@@ -347,10 +365,10 @@ function AppInterna() {
   const buildSeedDefaults = () => ({ grupos_gastos: [], ingresos: [] });
 
   // ── Crear presupuesto desde el wizard de onboarding ─────────
-  const handleOnboardingCreate = async ({ nombre, grupos }) => {
+  const handleOnboardingCreate = async ({ nombre, grupos, moneda, moneda2 }) => {
     const slug = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
     const id   = `${slug}_${Date.now().toString(36)}`;
-    const meta = { nombre, creadoEn: new Date().toISOString() };
+    const meta = { nombre, creadoEn: new Date().toISOString(), moneda: moneda || MONEDA_DEFAULT, moneda2: moneda2 ?? '' };
     const seed = {
       grupos_gastos: grupos,
       ingresos: [],
@@ -360,16 +378,65 @@ function AppInterna() {
     await set(ref(db, `accesos/${user.uid}/${id}`), {
       ownerUid: user.uid, nombre, rol: 'owner', creadoEn: new Date().toISOString(),
     });
-    // Guardar como Default General para futuros usuarios nuevos
-    await set(ref(db, 'defaults/general'), {
-      _meta: { nombre: 'General', creadoEn: new Date().toISOString() },
-      grupos_gastos: grupos,
-      ingresos: [],
-    });
+    // No se sobrescribe defaults/general: la elección (o la propuesta de la IA) de un
+    // usuario no debe cambiar la plantilla sugerida para todos. Se edita desde Plantillas.
     const nuevo = { id, nombre, ownerUid: user.uid, rol: 'owner' };
     setPresupuestos([nuevo]);
     setPresupuestoActual(id);
     setShowOnboarding(false);
+  };
+
+  // ── Cambiar las monedas del presupuesto activo (solo dueño) ─────
+  // No convierte montos. Actualiza _meta y el código de moneda de tarjetas (todos los
+  // meses) y cuotas para que sigan siendo "principal" o "secundaria".
+  const cambiarMonedas = async () => {
+    if (!monedaEdit || !presupuestoActual) return;
+    const viejas = monedasActivas;
+    const nuevas = monedasDeMeta({ moneda: monedaEdit.moneda, moneda2: monedaEdit.moneda2 });
+    const mapear = (codigo) => (viejas.secundaria && codigo === viejas.secundaria)
+      ? (nuevas.secundaria || nuevas.principal)
+      : nuevas.principal;
+
+    setGuardandoMoneda(true);
+    try {
+      const base = `presupuestos/${ownerUidActual}/${presupuestoActual}`;
+      const updates = {
+        [`${base}/_meta/moneda`]: nuevas.principal,
+        [`${base}/_meta/moneda2`]: nuevas.secundaria,
+      };
+      const snap = await get(ref(db, base));
+      const data = snap.exists() ? snap.val() : {};
+      Object.keys(data).filter(k => /^\d{4}_\d{1,2}$/.test(k)).forEach(mesK => {
+        const tarjetas = data[mesK]?.tarjetas || {};
+        Object.keys(tarjetas).forEach(i => {
+          const t = tarjetas[i];
+          if (!t) return;
+          const nuevo = mapear(t.moneda);
+          if (t.moneda !== nuevo) updates[`${base}/${mesK}/tarjetas/${i}/moneda`] = nuevo;
+        });
+      });
+      const fins = data._financiaciones || {};
+      Object.keys(fins).forEach(i => {
+        const f = fins[i];
+        if (!f) return;
+        const nuevo = mapear(f.moneda);
+        if (f.moneda !== nuevo) updates[`${base}/_financiaciones/${i}/moneda`] = nuevo;
+      });
+      await update(ref(db), updates);
+
+      // Estado local en sintonía (el mes se reescribe con los códigos nuevos)
+      setMonedasActivas(nuevas);
+      configurarMonedas(nuevas.principal, nuevas.secundaria);
+      setFinanciaciones(prev => prev.map(f => ({ ...f, moneda: mapear(f.moneda) })));
+      if (mesData) {
+        updateMesData({ ...mesData, tarjetas: (mesData.tarjetas || []).map(t => ({ ...t, moneda: mapear(t.moneda) })) });
+      }
+      setShowMonedaModal(false);
+    } catch (e) {
+      console.error('Error cambiando la moneda:', e);
+      alert(`No se pudo cambiar la moneda: ${e.message}`);
+    }
+    setGuardandoMoneda(false);
   };
 
   // ── Crear nuevo presupuesto ─────────────────────────────────────
@@ -380,7 +447,7 @@ function AppInterna() {
     try {
       const slug = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20);
       const id = `${slug}_${Date.now().toString(36)}`;
-      const meta = { nombre, creadoEn: new Date().toISOString() };
+      const meta = { nombre, creadoEn: new Date().toISOString(), moneda: nuevasMonedas.moneda, moneda2: nuevasMonedas.moneda2 };
       await set(ref(db, `presupuestos/${user.uid}/${id}/_meta`), meta);
       // Usar plantilla seleccionada o seed local como _defaults
       let seed;
@@ -481,6 +548,13 @@ function AppInterna() {
     if (!presupuestoActual || !user) return;
     const ownerUid = presupuestos.find(p => p.id === presupuestoActual)?.ownerUid || user.uid;
     const cargarDefaults = async () => {
+      // Monedas del presupuesto (presupuestos viejos sin moneda: UYU + USD)
+      try {
+        const snapMeta = await get(ref(db, `presupuestos/${ownerUid}/${presupuestoActual}/_meta`));
+        setMonedasActivas(monedasDeMeta(snapMeta.exists() ? snapMeta.val() : null));
+      } catch (e) {
+        console.error('Error cargando monedas del presupuesto:', e);
+      }
       try {
         const snap = await get(ref(db, `presupuestos/${ownerUid}/${presupuestoActual}/_defaults`));
         if (snap.exists()) {
@@ -734,7 +808,7 @@ function AppInterna() {
 
   // ── Onboarding: primer uso ──────────────────────────────────────
   if (showOnboarding) {
-    return <OnboardingWizard onCreate={handleOnboardingCreate} />;
+    return <OnboardingWizard onCreate={handleOnboardingCreate} ia={{ apiKey: groqApiKey, url: groqUrl }} />;
   }
 
   return (
@@ -777,7 +851,49 @@ function AppInterna() {
               <UserPlus size={13} />
             </button>
           )}
+          {rolActual === 'owner' && (
+            <button
+              className="presup-share-btn presup-moneda-btn"
+              onClick={() => {
+                setMonedaEdit({ moneda: monedasActivas.principal, moneda2: monedasActivas.secundaria });
+                setShowMonedaModal(true);
+              }}
+              title={`Moneda del presupuesto: ${monedasActivas.principal}${monedasActivas.secundaria ? ' + ' + monedasActivas.secundaria : ''}`}
+            >
+              {MONEDAS[monedasActivas.principal]?.simbolo}
+            </button>
+          )}
         </div>
+
+        {/* Modal moneda del presupuesto (solo dueño) */}
+        {showMonedaModal && monedaEdit && (
+          <div className="presup-modal-overlay" onClick={() => !guardandoMoneda && setShowMonedaModal(false)}>
+            <div className="presup-modal" onClick={e => e.stopPropagation()}>
+              <div className="presup-modal-header">
+                <span>💱 Moneda del presupuesto</span>
+                <button className="presup-modal-close" onClick={() => setShowMonedaModal(false)} disabled={guardandoMoneda}>
+                  <X size={14} />
+                </button>
+              </div>
+              <SelectorMonedas
+                moneda={monedaEdit.moneda}
+                moneda2={monedaEdit.moneda2}
+                onChange={setMonedaEdit}
+                disabled={guardandoMoneda}
+              />
+              <p className="presup-moneda-aviso">
+                ⚠️ Los montos <strong>no se convierten</strong>: solo cambia la moneda con la que se muestran.
+                Las tarjetas y cuotas guardadas en la moneda anterior pasan a la nueva.
+              </p>
+              <div className="presup-modal-actions">
+                <button className="presup-modal-cancel" onClick={() => setShowMonedaModal(false)} disabled={guardandoMoneda}>Cancelar</button>
+                <button className="presup-modal-ok" onClick={cambiarMonedas} disabled={guardandoMoneda}>
+                  {guardandoMoneda ? <Loader size={13} className="spin" /> : 'Guardar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Banner de invitaciones pendientes */}
         {invitaciones.length > 0 && (
@@ -851,6 +967,12 @@ function AppInterna() {
                   </select>
                 </div>
               )}
+              <SelectorMonedas
+                moneda={nuevasMonedas.moneda}
+                moneda2={nuevasMonedas.moneda2}
+                onChange={setNuevasMonedas}
+                disabled={creando}
+              />
               <div className="presup-modal-actions">
                 <button className="presup-modal-cancel" onClick={() => setShowNuevoModal(false)}>Cancelar</button>
                 <button
@@ -991,7 +1113,7 @@ function AppInterna() {
         {/* Contenido */}
         <main className="main-content">
           {vista === 'plantillas' ? (
-            <DefaultsManager />
+            <DefaultsManager esAdmin={esAdmin} />
           ) : vista === 'caja' ? (
             <div className="page">
               <div className="page-header"><h1 className="page-title">🐷 Caja de Ahorro</h1></div>
@@ -1123,8 +1245,8 @@ function AppInterna() {
                   </div>
                 </div>
               )}
-              {vista === 'config' && (
-                <Config uid={user.uid} admins={admins} />
+              {vista === 'config' && esAdmin && (
+                <Config onGuardado={cargarGroqConfig} />
               )}
             </>
           )}

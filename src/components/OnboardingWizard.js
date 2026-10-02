@@ -6,11 +6,14 @@
 // Al confirmar guarda en Firebase:
 //   - presupuestos/{uid}/{id}/_defaults
 //   - defaults/general  (para futuros usuarios nuevos)
-import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Check, X, ChevronRight, ChevronLeft, Briefcase, Loader } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2, Check, X, ChevronRight, ChevronLeft, Briefcase, Loader, Sparkles, Camera, Image as ImageIcon } from 'lucide-react';
 import { ref, get } from 'firebase/database';
 import { db } from '../firebase';
 import { FRECUENCIAS_GRUPO } from '../constants';
+import { armarPresupuesto } from '../ia';
+import SelectorMonedas from './SelectorMonedas';
+import { MONEDA_DEFAULT, MONEDA2_DEFAULT, moneyDe } from '../moneda';
 
 const ICONOS_RAPIDOS = [
   // Hogar
@@ -35,8 +38,6 @@ const ICONOS_RAPIDOS = [
   '📜','🛡️','📞','🌐','🚑',
 ];
 
-const fmt = (n) =>
-  new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 // --- Helpers --------------------------------------------------
 function toArray(val) {
@@ -52,6 +53,142 @@ function genId(nombre) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]/g, '_')
     .slice(0, 20) + '_' + Date.now().toString(36).slice(-4);
+}
+
+// ---------------------------------------------------------------
+// PASO 0 (opcional): elegir entre la plantilla sugerida o armarlo con IA
+// ---------------------------------------------------------------
+
+function Paso0({ ia, monedas, onMonedas, onPlantilla, onPropuestaIA }) {
+  const [modoIA, setModoIA]   = useState(false);
+  const [texto, setTexto]     = useState('');
+  const [imagen, setImagen]   = useState(null);
+  const [armando, setArmando] = useState(false);
+  const [error, setError]     = useState('');
+  const camaraRef  = useRef(null);
+  const galeriaRef = useRef(null);
+
+  const leerImagen = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = ev => setImagen(ev.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const armar = async () => {
+    setArmando(true);
+    setError('');
+    try {
+      const { grupos, notas } = await armarPresupuesto({ texto, imagen, moneda: monedas.moneda }, ia);
+      onPropuestaIA(
+        grupos.map(g => ({ ...g, id: genId(g.nombre) })),
+        notas,
+      );
+    } catch (e) {
+      setError(e.message);
+    }
+    setArmando(false);
+  };
+
+  return (
+    <div className="ob-step">
+      <div className="ob-step-icon">👋</div>
+      <h2 className="ob-step-title">¿Cómo querés empezar?</h2>
+      <p className="ob-step-desc">
+        Podés partir de una plantilla con los gastos más comunes, o contarle a la IA cómo es tu hogar
+        para que te arme una propuesta. En los dos casos la revisás y editás antes de crearla.
+      </p>
+
+      <SelectorMonedas moneda={monedas.moneda} moneda2={monedas.moneda2} onChange={onMonedas} disabled={armando} />
+
+      <div className="ob-inicio-opciones">
+        <button className="ob-inicio-opcion" onClick={onPlantilla} disabled={armando}>
+          <span className="ob-inicio-icono">📋</span>
+          <span className="ob-inicio-texto">
+            <strong>Usar la plantilla sugerida</strong>
+            <small>Fijos, impuestos, supermercado y más. Lo ajustás después.</small>
+          </span>
+          <ChevronRight size={18} />
+        </button>
+
+        {ia?.apiKey && (
+          <div className={`ob-inicio-opcion ob-inicio-ia${modoIA ? ' abierta' : ''}`}>
+            <button className="ob-inicio-opcion-head" onClick={() => setModoIA(m => !m)} disabled={armando}>
+              <span className="ob-inicio-icono">✨</span>
+              <span className="ob-inicio-texto">
+                <strong>Armalo con IA</strong>
+                <small>Contá cómo es tu hogar o subí una foto de tu planilla actual.</small>
+              </span>
+              <ChevronRight size={18} className={modoIA ? 'ob-rot90' : ''} />
+            </button>
+
+            {modoIA && (
+              <div className="ob-ia-form">
+                <textarea
+                  className="ob-input ob-ia-texto"
+                  rows={4}
+                  value={texto}
+                  onChange={e => setTexto(e.target.value)}
+                  placeholder="Ej: Somos 2 adultos y un nene, alquilamos en Montevideo, tenemos auto, hacemos el súper todas las semanas, pagamos UTE, OSE, Antel, gimnasio y el colegio."
+                  disabled={armando}
+                />
+
+                <input ref={camaraRef} type="file" accept="image/*" capture="environment" onChange={leerImagen} style={{ display: 'none' }} />
+                <input ref={galeriaRef} type="file" accept="image/*" onChange={leerImagen} style={{ display: 'none' }} />
+
+                {imagen ? (
+                  <div className="ob-ia-foto">
+                    <img src={imagen} alt="Planilla" />
+                    <button className="ob-grupo-del" onClick={() => setImagen(null)} disabled={armando} title="Quitar foto">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="ob-ia-foto-btns">
+                    <span>Opcional: foto de tu planilla o lista de gastos</span>
+                    <button className="ob-btn-secondary" onClick={() => camaraRef.current?.click()} disabled={armando}>
+                      <Camera size={15} /> Sacar foto
+                    </button>
+                    <button className="ob-btn-secondary" onClick={() => galeriaRef.current?.click()} disabled={armando}>
+                      <ImageIcon size={15} /> Galería
+                    </button>
+                  </div>
+                )}
+
+                {error && <p className="ob-ia-error">{error}</p>}
+
+                <button
+                  className="ob-btn-primary ob-ia-armar"
+                  onClick={armar}
+                  disabled={armando || (!texto.trim() && !imagen)}
+                >
+                  {armando
+                    ? <><Loader size={15} className="spin" /> La IA está armando tu presupuesto...</>
+                    : <><Sparkles size={15} /> Armar mi presupuesto</>}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Aviso en los pasos 1 y 2 cuando la propuesta la armó la IA
+function AvisoIA({ notas, onUsarPlantilla }) {
+  return (
+    <div className="ob-aviso-ia">
+      <strong>✨ Propuesta armada por la IA.</strong> Revisala: podés cambiar, quitar o agregar lo que quieras.
+      Los montos previstos los completás vos (ahora o después, cada mes).
+      {notas && <span className="ob-aviso-notas">{notas}</span>}
+      {onUsarPlantilla && (
+        <button className="ob-link" onClick={onUsarPlantilla}>Usar la plantilla sugerida en su lugar</button>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------
@@ -81,7 +218,7 @@ function GrupoFila({ grupo, onUpdate, onDelete }) {
             onChange={e => onUpdate({ ...grupo, frecuencia: e.target.value })}
           >
             {FRECUENCIAS_GRUPO.map(f => (
-              <option key={f.value} value={f.value}>{f.label}  {f.desc}</option>
+              <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>
             ))}
           </select>
         </>
@@ -101,13 +238,13 @@ function GrupoFila({ grupo, onUpdate, onDelete }) {
 function AgregarGrupoForm({ onAdd }) {
   const [show, setShow]           = useState(false);
   const [nombre, setNombre]       = useState('');
-  const [icono, setIcono]         = useState('??');
+  const [icono, setIcono]         = useState('📦');
   const [frecuencia, setFrecuencia] = useState('mensual');
 
   const add = () => {
     if (!nombre.trim()) return;
     onAdd({ id: genId(nombre), nombre: nombre.trim(), icono, frecuencia, items: [] });
-    setNombre(''); setIcono('??'); setFrecuencia('mensual'); setShow(false);
+    setNombre(''); setIcono('📦'); setFrecuencia('mensual'); setShow(false);
   };
 
   if (!show) return (
@@ -152,20 +289,24 @@ function AgregarGrupoForm({ onAdd }) {
   );
 }
 
-function Paso1({ grupos, onChange, onNext }) {
+function Paso1({ grupos, onChange, onBack, onNext, aviso }) {
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">??</div>
+      <div className="ob-step-icon">🗂️</div>
       <h2 className="ob-step-title">Grupos de gastos</h2>
       <p className="ob-step-desc">
-        Defini como se organiza tu presupuesto. Cada grupo tiene una
-        <strong> frecuencia</strong> que divide el mes en periodos independientes.
-        Podes cambiarlos en cualquier momento desde Plantillas.
+        Definí cómo se organiza tu presupuesto. Cada grupo tiene una
+        <strong> frecuencia</strong> que divide el mes en períodos independientes.
+        Podés cambiarlos en cualquier momento desde Plantillas.
       </p>
 
+      {aviso}
+
       <div className="ob-grupos-list">
+        {/* Agregar arriba: el grupo nuevo queda primero en la lista */}
+        <AgregarGrupoForm onAdd={g => onChange([g, ...grupos])} />
         {grupos.length === 0 && (
-          <p className="ob-empty-hint">Todavia no hay grupos. Agrega al menos uno para continuar.</p>
+          <p className="ob-empty-hint">Todavía no hay grupos. Agregá al menos uno para continuar.</p>
         )}
         {grupos.map((g, idx) => (
           <GrupoFila
@@ -175,10 +316,14 @@ function Paso1({ grupos, onChange, onNext }) {
             onDelete={() => onChange(grupos.filter((_, i) => i !== idx))}
           />
         ))}
-        <AgregarGrupoForm onAdd={g => onChange([...grupos, g])} />
       </div>
 
       <div className="ob-actions">
+        {onBack && (
+          <button className="ob-btn-secondary" onClick={onBack}>
+            <ChevronLeft size={16} /> Atrás
+          </button>
+        )}
         <button
           className="ob-btn-primary"
           onClick={onNext}
@@ -202,7 +347,8 @@ function ItemsGrupo({ grupo, onChange }) {
 
   const add = () => {
     if (!newNombre.trim()) return;
-    onChange([...items, { nombre: newNombre.trim(), previsto: parseFloat(newPrev) || 0 }]);
+    // Se agrega arriba, junto al formulario, para verlo sin hacer scroll
+    onChange([{ nombre: newNombre.trim(), previsto: parseFloat(newPrev) || 0 }, ...items]);
     setNewNombre(''); setNewPrev('');
   };
 
@@ -211,10 +357,31 @@ function ItemsGrupo({ grupo, onChange }) {
 
   return (
     <div className="ob-items-grupo">
+      <div className="ob-add-item-row">
+        <input
+          className="ob-input ob-input-sm"
+          value={newNombre}
+          onChange={e => setNewNombre(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="Nuevo item..."
+        />
+        <input
+          type="number"
+          className="ob-input ob-input-sm ob-input-num"
+          value={newPrev}
+          onChange={e => setNewPrev(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          placeholder="Previsto"
+        />
+        <button className="ob-btn-confirm" onClick={add} disabled={!newNombre.trim()}>
+          <Plus size={14} />
+        </button>
+      </div>
+
       {items.length > 0 && (
         <table className="ob-items-table">
           <thead>
-            <tr><th>Nombre</th><th>Previsto $</th><th></th></tr>
+            <tr><th>Nombre</th><th>Previsto</th><th></th></tr>
           </thead>
           <tbody>
             {items.map((it, idx) => (
@@ -243,32 +410,11 @@ function ItemsGrupo({ grupo, onChange }) {
           </tbody>
         </table>
       )}
-
-      <div className="ob-add-item-row">
-        <input
-          className="ob-input ob-input-sm"
-          value={newNombre}
-          onChange={e => setNewNombre(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && add()}
-          placeholder="Nuevo item..."
-        />
-        <input
-          type="number"
-          className="ob-input ob-input-sm ob-input-num"
-          value={newPrev}
-          onChange={e => setNewPrev(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && add()}
-          placeholder="$ previsto"
-        />
-        <button className="ob-btn-confirm" onClick={add} disabled={!newNombre.trim()}>
-          <Plus size={14} />
-        </button>
-      </div>
     </div>
   );
 }
 
-function Paso2({ grupos, onChange, onBack, onNext }) {
+function Paso2({ grupos, onChange, onBack, onNext, aviso }) {
   const [grupoActivo, setGrupoActivo] = useState(0);
 
   const updateItems = (idx, items) =>
@@ -276,12 +422,14 @@ function Paso2({ grupos, onChange, onBack, onNext }) {
 
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">??</div>
+      <div className="ob-step-icon">📝</div>
       <h2 className="ob-step-title">Items por grupo</h2>
       <p className="ob-step-desc">
-        Agrega los gastos habituales de cada grupo. Los montos previstos son opcionales 
-        podes completarlos despues o cambiarlos cada mes.
+        Agregá los gastos habituales de cada grupo. Los montos previstos son opcionales:
+        podés completarlos después o cambiarlos cada mes.
       </p>
+
+      {aviso}
 
       {/* Tabs de grupos */}
       <div className="ob-group-tabs">
@@ -309,7 +457,7 @@ function Paso2({ grupos, onChange, onBack, onNext }) {
 
       <div className="ob-actions">
         <button className="ob-btn-secondary" onClick={onBack}>
-          <ChevronLeft size={16} /> Atras
+          <ChevronLeft size={16} /> Atrás
         </button>
         <button className="ob-btn-primary" onClick={onNext}>
           Siguiente <ChevronRight size={16} />
@@ -323,18 +471,18 @@ function Paso2({ grupos, onChange, onBack, onNext }) {
 // PASO 3: Nombre del presupuesto + confirmar
 // ---------------------------------------------------------------
 
-function Paso3({ nombre, onChange, grupos, onBack, onConfirm, creando }) {
+function Paso3({ nombre, onChange, monedas, onMonedas, grupos, onBack, onConfirm, creando }) {
   const totalItems = grupos.reduce((s, g) => s + (g.items || []).length, 0);
   const totalPrev  = grupos.reduce((s, g) =>
     s + (g.items || []).reduce((ss, it) => ss + (it.previsto || 0), 0), 0);
 
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">??</div>
+      <div className="ob-step-icon">💼</div>
       <h2 className="ob-step-title">Nombre del presupuesto</h2>
       <p className="ob-step-desc">
-        Pone un nombre para identificar este presupuesto.
-        Podes tener varios (personal, del hogar, del negocio, etc.).
+        Poné un nombre para identificar este presupuesto.
+        Podés tener varios (personal, del hogar, del negocio, etc.).
       </p>
 
       <div className="ob-field">
@@ -350,6 +498,8 @@ function Paso3({ nombre, onChange, grupos, onBack, onConfirm, creando }) {
         />
       </div>
 
+      <SelectorMonedas moneda={monedas.moneda} moneda2={monedas.moneda2} onChange={onMonedas} disabled={creando} />
+
       {/* Resumen de lo que se va a crear */}
       <div className="ob-resumen">
         <div className="ob-resumen-title">Resumen de la plantilla</div>
@@ -364,14 +514,14 @@ function Paso3({ nombre, onChange, grupos, onBack, onConfirm, creando }) {
         ))}
         {totalItems > 0 && (
           <div className="ob-resumen-total">
-            {totalItems} items &middot; ${fmt(totalPrev)} previsto/mes estimado
+            {totalItems} items &middot; {moneyDe(totalPrev, monedas.moneda)} previsto por período
           </div>
         )}
       </div>
 
       <div className="ob-actions">
         <button className="ob-btn-secondary" onClick={onBack}>
-          <ChevronLeft size={16} /> Atras
+          <ChevronLeft size={16} /> Atrás
         </button>
         <button
           className="ob-btn-primary"
@@ -392,10 +542,14 @@ function Paso3({ nombre, onChange, grupos, onBack, onConfirm, creando }) {
 // Wizard principal
 // ---------------------------------------------------------------
 
-export default function OnboardingWizard({ onCreate }) {
-  const [paso, setPaso]       = useState(1);
+// ia: { apiKey, url } de Groq. Sin clave, el paso "Armalo con IA" no se ofrece.
+export default function OnboardingWizard({ onCreate, ia }) {
+  const [paso, setPaso]       = useState(0);
   const [nombre, setNombre]   = useState('Mi Presupuesto');
   const [grupos, setGrupos]   = useState([]);
+  const [plantilla, setPlantilla] = useState([]);   // grupos de defaults/general, para volver a ellos
+  const [propuestaIA, setPropuestaIA] = useState(null); // { notas } si los grupos los armó la IA
+  const [monedas, setMonedas] = useState({ moneda: MONEDA_DEFAULT, moneda2: MONEDA2_DEFAULT });
   const [creando, setCreando] = useState(false);
   const [cargando, setCargando] = useState(true);
 
@@ -408,7 +562,9 @@ export default function OnboardingWizard({ onCreate }) {
           const data = snap.val();
           const gs = toArray(data.grupos_gastos || []);
           if (gs.length > 0) {
-            setGrupos(gs.map(g => ({ ...g, items: toArray(g.items || []) })));
+            const base = gs.map(g => ({ ...g, items: toArray(g.items || []) }));
+            setPlantilla(base);
+            setGrupos(base);
           }
         }
       } catch (e) {
@@ -419,11 +575,27 @@ export default function OnboardingWizard({ onCreate }) {
     cargarGeneral();
   }, []);
 
+  const usarPlantilla = () => {
+    setGrupos(plantilla);
+    setPropuestaIA(null);
+    setPaso(1);
+  };
+
+  const usarPropuestaIA = (gruposIA, notas) => {
+    setGrupos(gruposIA);
+    setPropuestaIA({ notas });
+    setPaso(1);
+  };
+
+  const aviso = propuestaIA
+    ? <AvisoIA notas={propuestaIA.notas} onUsarPlantilla={plantilla.length > 0 ? usarPlantilla : null} />
+    : null;
+
   const confirmar = async () => {
     if (!nombre.trim() || grupos.length === 0) return;
     setCreando(true);
     try {
-      await onCreate({ nombre: nombre.trim(), grupos });
+      await onCreate({ nombre: nombre.trim(), grupos, ...monedas });
     } catch (e) {
       console.error('Error en onboarding:', e);
     }
@@ -445,22 +617,29 @@ export default function OnboardingWizard({ onCreate }) {
 
   return (
     <div className="ob-overlay">
-      {/* Indicador de pasos */}
-      <div className="ob-progress">
-        {PASOS.map((n, i) => (
-          <React.Fragment key={n}>
-            {i > 0 && <div className="ob-progress-line" />}
-            <div className={`ob-progress-step${paso >= n ? ' done' : ''}`}>{n}</div>
-          </React.Fragment>
-        ))}
-      </div>
+      {/* Indicador de pasos (el paso 0 de elección no se numera) */}
+      {paso > 0 && (
+        <div className="ob-progress">
+          {PASOS.map((n, i) => (
+            <React.Fragment key={n}>
+              {i > 0 && <div className="ob-progress-line" />}
+              <div className={`ob-progress-step${paso >= n ? ' done' : ''}`}>{n}</div>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
 
-      <div className="ob-card">
+      <div className={`ob-card${paso === 0 ? ' ob-card-inicio' : ''}`}>
+        {paso === 0 && (
+          <Paso0 ia={ia} monedas={monedas} onMonedas={setMonedas} onPlantilla={usarPlantilla} onPropuestaIA={usarPropuestaIA} />
+        )}
         {paso === 1 && (
           <Paso1
             grupos={grupos}
             onChange={setGrupos}
+            onBack={() => setPaso(0)}
             onNext={() => setPaso(2)}
+            aviso={aviso}
           />
         )}
         {paso === 2 && (
@@ -469,12 +648,15 @@ export default function OnboardingWizard({ onCreate }) {
             onChange={setGrupos}
             onBack={() => setPaso(1)}
             onNext={() => setPaso(3)}
+            aviso={aviso}
           />
         )}
         {paso === 3 && (
           <Paso3
             nombre={nombre}
             onChange={setNombre}
+            monedas={monedas}
+            onMonedas={setMonedas}
             grupos={grupos}
             onBack={() => setPaso(2)}
             onConfirm={confirmar}

@@ -1,6 +1,8 @@
 // src/ia.js
-// Lectura de comprobantes y sugerencia de matches con Groq (API compatible con OpenAI).
-// La API key y la URL son las mismas que usa el chat (config/{uid}/groq_*).
+// Lectura de comprobantes, sugerencia de matches y armado de presupuestos con
+// Groq (API compatible con OpenAI). La clave es la del sistema (sistema/ia).
+
+import { MONEDAS, MONEDA_DEFAULT } from './moneda';
 
 const GROQ_URL_DEFAULT = 'https://api.groq.com/openai/v1';
 // Modelo con soporte de imágenes. Es independiente del modelo elegido para el chat.
@@ -123,6 +125,52 @@ IMPORTANTE:
       .filter(i => i && i.nombre)
       .map(i => ({ ...i, total: Number(i.total) || 0 })),
   };
+}
+
+// Arma una propuesta de presupuesto (grupos de gastos con items y montos estimados)
+// a partir de una descripción del hogar y/o una foto de la planilla que ya usa.
+// Devuelve { grupos: [{ nombre, icono, frecuencia, items: [{ nombre, previsto }] }], notas }.
+const FRECUENCIAS = ['mensual', 'quincenal', 'cada10dias', 'semanal'];
+
+export async function armarPresupuesto({ texto = '', imagen = null, moneda = MONEDA_DEFAULT }, ia) {
+  if (!texto.trim() && !imagen) throw new Error('Contá cómo es tu hogar o subí una foto de tu planilla');
+  const img = imagen ? await reducirImagen(imagen) : null;
+  const info = MONEDAS[moneda] || MONEDAS[MONEDA_DEFAULT];
+
+  const resultado = await llamarGroq(`Sos un asesor de finanzas personales. Ayudá a una familia a armar su presupuesto mensual en ${info.nombre} (${moneda}); probablemente vive en ${info.pais}, así que usá nombres de gastos habituales allí.
+${texto.trim() ? `\nCómo es el hogar, en palabras del usuario:\n"""${texto.trim()}"""\n` : ''}${img ? '\nLa imagen adjunta es la planilla o lista de gastos que ya usa: respetá sus categorías, gastos y montos.\n' : ''}
+Armá los GRUPOS de gastos con sus ITEMS. Reglas:
+- Cada grupo tiene una frecuencia: "mensual" (cuentas fijas: alquiler, luz, agua, internet, cuotas, colegio), "semanal" (supermercado, feria), "cada10dias" (combustible, transporte) o "quincenal".
+- MONTOS: NO estimes ni inventes montos. "previsto" es 0 salvo que el usuario o la planilla indiquen explícitamente el monto de ese gasto; en ese caso usá ese número tal cual (es el monto de UN período de la frecuencia del grupo).
+- Agrupá con criterio (5 a 9 grupos), nombres cortos en español y un emoji representativo por grupo.
+- No incluyas ingresos ni ahorro como gastos.
+- En "notas" explicá en 1 o 2 frases qué supusiste al armar los grupos.
+
+Devolvé SOLO un JSON válido con esta estructura exacta:
+{
+  "grupos": [
+    { "nombre": "Supermercado", "icono": "🛒", "frecuencia": "semanal",
+      "items": [ { "nombre": "Compra semanal", "previsto": número } ] }
+  ],
+  "notas": "texto"
+}`, img, ia);
+
+  // Normalizar y acotar lo que devuelve la IA
+  const grupos = (Array.isArray(resultado.grupos) ? resultado.grupos : [])
+    .filter(g => g && typeof g.nombre === 'string' && g.nombre.trim())
+    .slice(0, 15)
+    .map(g => ({
+      nombre: g.nombre.trim().slice(0, 40),
+      icono: typeof g.icono === 'string' && g.icono.trim() ? g.icono.trim().slice(0, 4) : '📦',
+      frecuencia: FRECUENCIAS.includes(g.frecuencia) ? g.frecuencia : 'mensual',
+      items: (Array.isArray(g.items) ? g.items : [])
+        .filter(i => i && typeof i.nombre === 'string' && i.nombre.trim())
+        .slice(0, 40)
+        .map(i => ({ nombre: i.nombre.trim().slice(0, 60), previsto: Math.max(0, Math.round(Number(i.previsto) || 0)) })),
+    }));
+
+  if (grupos.length === 0) throw new Error('La IA no pudo armar una propuesta. Probá contando un poco más de tu hogar.');
+  return { grupos, notas: typeof resultado.notas === 'string' ? resultado.notas : '' };
 }
 
 // Sugiere, para cada item del comprobante, cuál de los gastos existentes de una

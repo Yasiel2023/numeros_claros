@@ -2,13 +2,17 @@
 // Credito: monto pendiente + pagado (modelo existente)
 // Debito:  saldoInicial + historial de saldos [{ts, fecha, monto, nota}]
 import React, { useState } from 'react';
+import { money, moneyTarjeta, decimalesDe, monedaPrincipal, monedaSecundaria, monedasDisponibles, esSecundaria, MONEDAS } from '../moneda';
 import { Plus, Trash2, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, CalendarClock, CreditCard } from 'lucide-react';
 import { MESES_ES } from '../constants';
 import { numeroCuota, estaActiva } from '../financiaciones';
 import { pagadoTarjeta, saldoTarjeta, gastosDeTarjeta, montoCargado } from '../tarjetas';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
-const fmtUSD = (n) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2, useGrouping: false }).format(n || 0);
+// Opciones de moneda para tarjetas y cuotas: la principal y, si hay, la secundaria
+const OpcionesMoneda = () => monedasDisponibles().map(c => (
+  <option key={c} value={c}>{c} {MONEDAS[c]?.simbolo}</option>
+));
+
 const fmtFecha = () => {
   const d = new Date();
   return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -53,12 +57,12 @@ function TarjetaDebito({ tarjeta, onUpdate, onDelete }) {
         </div>
         <div className="tarj-debito-saldo">
           <span className="tarj-saldo-val">
-            {tarjeta.moneda === 'USD' ? fmtUSD(saldoActual) : `$${fmt(saldoActual)}`}
+            {moneyTarjeta(saldoActual, tarjeta.moneda)}
           </span>
           {diff !== null && (
             <span className={`tarj-saldo-diff ${diffColor}`}>
               {DiffIcon && <DiffIcon size={12}/>}
-              {diff > 0 ? '+' : ''}{tarjeta.moneda === 'USD' ? fmtUSD(diff) : `$${fmt(diff)}`}
+              {diff > 0 ? '+' : ''}{moneyTarjeta(diff, tarjeta.moneda)}
             </span>
           )}
         </div>
@@ -85,7 +89,7 @@ function TarjetaDebito({ tarjeta, onUpdate, onDelete }) {
           />
           {diffInicial !== null && (
             <span className={`tarj-saldo-diff ${diffInicial >= 0 ? 'green' : 'red'}`}>
-              {diffInicial >= 0 ? '+' : ''}{tarjeta.moneda === 'USD' ? fmtUSD(diffInicial) : `$${fmt(diffInicial)}`} vs inicio
+              {diffInicial >= 0 ? '+' : ''}{moneyTarjeta(diffInicial, tarjeta.moneda)} vs inicio
             </span>
           )}
         </div>
@@ -95,7 +99,7 @@ function TarjetaDebito({ tarjeta, onUpdate, onDelete }) {
       {showForm && (
         <div className="tarj-saldo-form">
           <input
-            type="number" className="cell-input" placeholder="Saldo actual $" min="0"
+            type="number" className="cell-input" placeholder="Saldo actual" min="0"
             value={newMonto} onChange={e => setNewMonto(e.target.value)}
             autoFocus
             onKeyDown={e => e.key === 'Enter' && registrar()}
@@ -126,10 +130,10 @@ function TarjetaDebito({ tarjeta, onUpdate, onDelete }) {
                   <div key={s.id || s.ts || ri} className="tarj-hist-row">
                     <span className="tarj-hist-fecha">{s.fecha}</span>
                     <span className="tarj-hist-monto">
-                      {tarjeta.moneda === 'USD' ? fmtUSD(s.monto) : `$${fmt(s.monto)}`}
+                      {moneyTarjeta(s.monto, tarjeta.moneda)}
                     </span>
                     <span className={`tarj-hist-diff ${d > 0 ? 'green' : d < 0 ? 'red' : ''}`}>
-                      {d > 0 ? '+' : ''}{tarjeta.moneda === 'USD' ? fmtUSD(d) : `$${fmt(d)}`}
+                      {d > 0 ? '+' : ''}{moneyTarjeta(d, tarjeta.moneda)}
                     </span>
                     {s.auto && <span className="tarj-hist-auto">auto</span>}
                     {s.nota && <span className="tarj-hist-nota">{s.nota}</span>}
@@ -175,7 +179,7 @@ function AgregarCargoForm({ onAdd }) {
         onKeyDown={e => e.key === 'Enter' && confirmar()}
       />
       <input
-        type="number" className="add-input short" value={monto} placeholder="Monto $"
+        type="number" className="add-input short" value={monto} placeholder="Monto"
         onChange={e => setMonto(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && confirmar()}
       />
@@ -192,8 +196,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
   const [montoPago, setMontoPago] = useState('');
   const [origen, setOrigen]     = useState('');
 
-  const esUSD = tarjeta.moneda === 'USD';
-  const money = (n) => esUSD ? fmtUSD(n) : `$${fmt(n)}`;
+  const montoT = (n) => moneyTarjeta(n, tarjeta.moneda);
 
   const cuotas      = tarjeta.cuotas || [];
   const cargos      = tarjeta.cargos || [];
@@ -257,9 +260,9 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
         </div>
         <div className="tarj-credito-saldo">
           <span className="tarj-credito-saldo-lbl">{saldado ? 'Saldada' : 'Saldo a pagar'}</span>
-          <span className={`tarj-saldo-val ${saldado ? 'ok' : 'deuda'}`}>{money(saldo)}</span>
+          <span className={`tarj-saldo-val ${saldado ? 'ok' : 'deuda'}`}>{montoT(saldo)}</span>
           {pagado > 0 && !saldado && (
-            <span className="tarj-credito-pagado-parcial">Pagado {money(pagado)} de {money(total)}</span>
+            <span className="tarj-credito-pagado-parcial">Pagado {montoT(pagado)} de {montoT(total)}</span>
           )}
         </div>
         <div className="tarj-debito-actions">
@@ -296,7 +299,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
                 <option value="">💵 Efectivo / Transferencia</option>
                 {origenes.map(d => (
                   <option key={d.id} value={d.id}>
-                    🏧 {d.nombre} — saldo {money(saldoDebito(d))}
+                    🏧 {d.nombre} — saldo {montoT(saldoDebito(d))}
                   </option>
                 ))}
               </select>
@@ -307,7 +310,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
               Registrar pago
             </button>
             <button className="btn-sm-outline" onClick={() => registrarPago(saldo)}>
-              Pagar todo ({money(saldo)})
+              Pagar todo ({montoT(saldo)})
             </button>
             <button className="btn-cancel-caja" onClick={cerrarPago}>Cancelar</button>
           </div>
@@ -325,7 +328,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
                 <div key={`${c.finId}_${i}`} className="tarj-desglose-row">
                   <span>{c.concepto}</span>
                   <span className="tarj-desglose-cuota">cuota {c.numero}/{c.total}</span>
-                  <span className="tarj-desglose-monto">{money(c.monto)}</span>
+                  <span className="tarj-desglose-monto">{montoT(c.monto)}</span>
                 </div>
               ))}
             </div>
@@ -337,7 +340,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
               {itemsGasto.map((i, idx) => (
                 <div key={idx} className="tarj-desglose-row">
                   <span>{i.nombre}</span>
-                  <span className="tarj-desglose-monto">{money(montoCargado(i))}</span>
+                  <span className="tarj-desglose-monto">{montoT(montoCargado(i))}</span>
                 </div>
               ))}
             </div>
@@ -349,7 +352,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
               <div key={c.id} className="tarj-desglose-row">
                 <span>{c.concepto}</span>
                 <span className="tarj-desglose-origen">{c.fecha}</span>
-                <span className="tarj-desglose-monto">{money(c.monto)}</span>
+                <span className="tarj-desglose-monto">{montoT(c.monto)}</span>
                 <button className="icon-btn-sm danger" onClick={() => eliminarCargo(c.id)}>
                   <Trash2 size={12}/>
                 </button>
@@ -361,7 +364,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
                 <input
                   type="number" className="cell-input tarj-sin-detallar" placeholder="0"
                   value={sinDetallar || ''}
-                  step={esUSD ? '0.01' : '1'}
+                  step={decimalesDe(tarjeta.moneda) > 0 ? '0.01' : '1'}
                   onChange={e => onUpdate({
                     ...tarjeta,
                     monto: totalCuotas + totalGastos + totalCargos + (parseFloat(e.target.value) || 0),
@@ -385,7 +388,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
                     <span className="tarj-desglose-origen">
                       {origenNombre ? `🏧 ${origenNombre}` : '💵 Efectivo / Transferencia'}
                     </span>
-                    <span className="tarj-desglose-monto pos">−{money(p.monto)}</span>
+                    <span className="tarj-desglose-monto pos">−{montoT(p.monto)}</span>
                   </div>
                 );
               })}
@@ -393,11 +396,11 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
           )}
 
           <div className="tarj-desglose-total">
-            <div className="tarj-desglose-row"><span>Total del mes</span><span className="tarj-desglose-monto">{money(total)}</span></div>
+            <div className="tarj-desglose-row"><span>Total del mes</span><span className="tarj-desglose-monto">{montoT(total)}</span></div>
             {pagado > 0 && (
-              <div className="tarj-desglose-row"><span>Pagado</span><span className="tarj-desglose-monto pos">−{money(pagado)}</span></div>
+              <div className="tarj-desglose-row"><span>Pagado</span><span className="tarj-desglose-monto pos">−{montoT(pagado)}</span></div>
             )}
-            <div className="tarj-desglose-row strong"><span>Saldo a pagar</span><span className="tarj-desglose-monto">{money(saldo)}</span></div>
+            <div className="tarj-desglose-row strong"><span>Saldo a pagar</span><span className="tarj-desglose-monto">{montoT(saldo)}</span></div>
           </div>
         </div>
       )}
@@ -410,7 +413,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
   const [showForm, setShowForm]   = useState(false);
   const [concepto, setConcepto]   = useState('');
   const [tarjetaNombre, setTarjetaNombre] = useState('');
-  const [moneda, setMoneda]       = useState('UYU');
+  const [moneda, setMoneda]       = useState(monedaPrincipal);
   const [modo, setModo]           = useState('cuota');
   const [monto, setMonto]         = useState('');
   const [nCuotas, setNCuotas]     = useState('');
@@ -422,7 +425,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
   )];
 
   const limpiar = () => {
-    setConcepto(''); setTarjetaNombre(''); setMoneda('UYU'); setModo('cuota');
+    setConcepto(''); setTarjetaNombre(''); setMoneda(monedaPrincipal()); setModo('cuota');
     setMonto(''); setNCuotas(''); setInicioMes(mes); setInicioAnio(anio);
     setShowForm(false);
   };
@@ -476,8 +479,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
             <div className="fin-field">
               <label>Moneda</label>
               <select className="cell-select" value={moneda} onChange={e => setMoneda(e.target.value)}>
-                <option value="UYU">UYU $</option>
-                <option value="USD">USD $</option>
+                <OpcionesMoneda />
               </select>
             </div>
             <div className="fin-field">
@@ -508,7 +510,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
           </div>
           {modo === 'total' && parseFloat(monto) > 0 && parseInt(nCuotas, 10) > 0 && (
             <div className="caja-preview">
-              {parseInt(nCuotas, 10)} cuotas de <strong>${fmt(parseFloat(monto) / parseInt(nCuotas, 10))}</strong>
+              {parseInt(nCuotas, 10)} cuotas de <strong>{moneyTarjeta(parseFloat(monto) / parseInt(nCuotas, 10), moneda)}</strong>
             </div>
           )}
           <div className="fin-form-btns">
@@ -531,7 +533,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
             const n = numeroCuota(f, anio, mes);
             const activa = estaActiva(f, anio, mes);
             const restantes = Math.max(0, (f.cuotasTotales || 0) - Math.max(0, n));
-            const money = (v) => f.moneda === 'USD' ? fmtUSD(v) : `$${fmt(v)}`;
+            const montoF = (v) => moneyTarjeta(v, f.moneda);
             return (
               <div key={f.id} className={`fin-row${activa ? '' : ' inactiva'}`}>
                 <div className="fin-row-info">
@@ -545,7 +547,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
                     ? `Cuota ${n} de ${f.cuotasTotales} · faltan ${restantes}`
                     : 'Finalizada'}
                 </span>
-                <span className="fin-row-monto">{money(f.montoCuota)}<small>/mes</small></span>
+                <span className="fin-row-monto">{montoF(f.montoCuota)}<small>/mes</small></span>
                 <button className="icon-btn-sm danger" onClick={() => eliminar(f.id)} title="Eliminar compra">
                   <Trash2 size={13}/>
                 </button>
@@ -568,7 +570,7 @@ export default function Tarjetas({
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [newNombre, setNewNombre] = useState('');
-  const [newMoneda, setNewMoneda] = useState('UYU');
+  const [newMoneda, setNewMoneda] = useState(monedaPrincipal);
   const [newTipo, setNewTipo] = useState('credito');
 
   const credito = data.filter(t => t.tipo !== 'debito');
@@ -581,7 +583,7 @@ export default function Tarjetas({
       ? { ...base, saldoInicial: 0, saldos: [] }
       : { ...base, monto: 0, pagado: false };
     onChange([...data, nueva]);
-    setNewNombre(''); setNewMoneda('UYU'); setNewTipo('credito'); setShowAdd(false);
+    setNewNombre(''); setNewMoneda(monedaPrincipal()); setNewTipo('credito'); setShowAdd(false);
   };
 
   const actualizarCredito = (tarjeta) => {
@@ -648,10 +650,10 @@ export default function Tarjetas({
     onChange(nuevas);
   };
 
-  const totalUYUPend = credito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + saldoTarjeta(t), 0);
-  const totalUSDPend = credito.filter(t => t.moneda === 'USD').reduce((s, t) => s + saldoTarjeta(t), 0);
-  const totalUYUPag  = credito.filter(t => t.moneda === 'UYU').reduce((s, t) => s + pagadoTarjeta(t), 0);
-  const totalUSDPag  = credito.filter(t => t.moneda === 'USD').reduce((s, t) => s + pagadoTarjeta(t), 0);
+  const totalUYUPend = credito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
+  const totalUSDPend = credito.filter(t => esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
+  const totalUYUPag  = credito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + pagadoTarjeta(t), 0);
+  const totalUSDPag  = credito.filter(t => esSecundaria(t.moneda)).reduce((s, t) => s + pagadoTarjeta(t), 0);
 
   return (
     <div className="section-block">
@@ -710,8 +712,7 @@ export default function Tarjetas({
             <option value="debito">Débito</option>
           </select>
           <select className="cell-select" value={newMoneda} onChange={e => setNewMoneda(e.target.value)}>
-            <option value="UYU">UYU $</option>
-            <option value="USD">USD $</option>
+                <OpcionesMoneda />
           </select>
           <button className="btn-confirm" onClick={agregar} disabled={!newNombre.trim()}>✓</button>
           <button className="btn-cancel" onClick={() => { setShowAdd(false); setNewNombre(''); }}>✕</button>
@@ -754,18 +755,18 @@ export default function Tarjetas({
               <span>Total pendiente</span>
               <strong className="neg">
                 {totalUYUPend === 0 && totalUSDPend === 0 && '—'}
-                {totalUYUPend > 0 && `$${fmt(totalUYUPend)}`}
+                {totalUYUPend > 0 && `${money(totalUYUPend)}`}
                 {totalUYUPend > 0 && totalUSDPend > 0 && ' + '}
-                {totalUSDPend > 0 && fmtUSD(totalUSDPend)}
+                {totalUSDPend > 0 && moneyTarjeta(totalUSDPend, monedaSecundaria())}
               </strong>
             </div>
             {(totalUYUPag > 0 || totalUSDPag > 0) && (
               <div className="tct-item">
                 <span>Total pagado</span>
                 <strong className="pos">
-                  {totalUYUPag > 0 && `$${fmt(totalUYUPag)}`}
+                  {totalUYUPag > 0 && `${money(totalUYUPag)}`}
                   {totalUYUPag > 0 && totalUSDPag > 0 && ' + '}
-                  {totalUSDPag > 0 && fmtUSD(totalUSDPag)}
+                  {totalUSDPag > 0 && moneyTarjeta(totalUSDPag, monedaSecundaria())}
                 </strong>
               </div>
             )}
@@ -789,7 +790,7 @@ export default function Tarjetas({
       {(totalUYUPend > 0 || totalUSDPend > 0) && (
         <div className="tarj-note">
           💡 La deuda de cada tarjeta se arma con las cuotas del mes, los gastos que pagaste con ella y los cargos que agregues a mano. Usá <strong>Pagar</strong> para saldarla total o parcialmente.
-          {totalUSDPend > 0 && <> La deuda en USD se muestra informativa.</>}
+          {totalUSDPend > 0 && <> La deuda en {monedaSecundaria()} se muestra informativa.</>}
         </div>
       )}
     </div>

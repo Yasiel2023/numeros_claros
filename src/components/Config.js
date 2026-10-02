@@ -1,106 +1,83 @@
 // src/components/Config.js
+// Configuración del sistema (solo admins). La clave de Groq es UNA para todos
+// los usuarios: se guarda en sistema/ia, que lee cualquier usuario con sesión y
+// solo los admins pueden escribir (ver database.rules.json).
 import React, { useState, useEffect } from 'react';
 import { AlertCircle, Eye, EyeOff, Check, Trash2 } from 'lucide-react';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { ref, set, get } from 'firebase/database';
 
-export default function Config({ uid, admins = {} }) {
+const URL_DEFAULT = 'https://api.groq.com/openai/v1';
+const MODELO_DEFAULT = 'openai/gpt-oss-120b';
+
+export default function Config({ onGuardado }) {
   const [groqApiKey, setGroqApiKey] = useState('');
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
-  const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
+  const [groqUrl, setGroqUrl] = useState(URL_DEFAULT);
+  const [groqModel, setGroqModel] = useState(MODELO_DEFAULT);
   const [showGroqKey, setShowGroqKey] = useState(false);
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [esGlobal, setEsGlobal] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const isAdmin = admins[uid] === true;
 
   useEffect(() => {
     const cargarConfig = async () => {
       try {
-        const snapGroqKey = await get(ref(db, `config/${uid}/groq_api_key`));
-        if (snapGroqKey.exists()) {
-          setGroqApiKey(snapGroqKey.val());
+        const snapGlobal = await get(ref(db, 'sistema/ia'));
+        let cfg = snapGlobal.exists() ? snapGlobal.val() : null;
+        setEsGlobal(!!cfg?.groq_api_key);
+        // Primera vez: se precarga la clave que el admin tenía en su configuración personal
+        if (!cfg?.groq_api_key && auth.currentUser) {
+          const snapPropia = await get(ref(db, `config/${auth.currentUser.uid}`));
+          if (snapPropia.exists()) cfg = snapPropia.val();
         }
-        const snapGeminiKey = await get(ref(db, `config/${uid}/gemini_api_key`));
-        if (snapGeminiKey.exists()) {
-          setGeminiApiKey(snapGeminiKey.val());
-        }
-        const snapUrl = await get(ref(db, `config/${uid}/groq_url`));
-        if (snapUrl.exists()) {
-          setGroqUrl(snapUrl.val());
-        }
-        const snapModel = await get(ref(db, `config/${uid}/groq_model`));
-        if (snapModel.exists()) {
-          setGroqModel(snapModel.val());
-        }
+        if (cfg?.groq_api_key) setGroqApiKey(cfg.groq_api_key);
+        if (cfg?.groq_url) setGroqUrl(cfg.groq_url);
+        if (cfg?.groq_model) setGroqModel(cfg.groq_model);
       } catch (e) {
-        console.error('Error cargando configuración:', e);
+        setError(`Error cargando configuración: ${e.message}`);
       } finally {
         setLoading(false);
       }
     };
     cargarConfig();
-  }, [uid]);
+  }, []);
+
+  const confirmarGuardado = () => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+    onGuardado?.();
+  };
 
   const guardar = async () => {
     setError('');
-
-    // Validar API keys si están presentes
-    if (groqApiKey.trim() && !groqApiKey.startsWith('gsk_')) {
-      setError('API key de Groq debe empezar con gsk_');
+    if (!groqApiKey.trim().startsWith('gsk_')) {
+      setError('La API key de Groq debe empezar con gsk_');
       return;
     }
-    if (geminiApiKey.trim() && !geminiApiKey.startsWith('AIza') && !geminiApiKey.startsWith('AQ.')) {
-      setError('API key de Gemini debe empezar con AIza o AQ.');
-      return;
-    }
-
     try {
-      // Guardar en Firebase
-      if (groqApiKey.trim()) {
-        await set(ref(db, `config/${uid}/groq_api_key`), groqApiKey);
-        await set(ref(db, `config/${uid}/groq_url`), groqUrl);
-        await set(ref(db, `config/${uid}/groq_model`), groqModel);
-      }
-      if (geminiApiKey.trim()) {
-        await set(ref(db, `config/${uid}/gemini_api_key`), geminiApiKey);
-      }
-
-      // Registrarse como admin si guardó alguna key
-      if ((groqApiKey.trim() || geminiApiKey.trim()) && !isAdmin) {
-        await set(ref(db, `admins/${uid}`), true);
-      }
-
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      await set(ref(db, 'sistema/ia'), {
+        groq_api_key: groqApiKey.trim(),
+        groq_url: groqUrl.trim() || URL_DEFAULT,
+        groq_model: groqModel.trim() || MODELO_DEFAULT,
+        actualizado: new Date().toISOString(),
+      });
+      setEsGlobal(true);
+      confirmarGuardado();
     } catch (e) {
       setError(`Error guardando configuración: ${e.message}`);
     }
   };
 
-  const eliminarGroq = async () => {
+  const eliminar = async () => {
     setError('');
     try {
-      await set(ref(db, `config/${uid}/groq_api_key`), null);
+      await set(ref(db, 'sistema/ia'), null);
       setGroqApiKey('');
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setEsGlobal(false);
+      confirmarGuardado();
     } catch (e) {
-      setError(`Error eliminando API key de Groq: ${e.message}`);
-    }
-  };
-
-  const eliminarGemini = async () => {
-    setError('');
-    try {
-      await set(ref(db, `config/${uid}/gemini_api_key`), null);
-      setGeminiApiKey('');
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) {
-      setError(`Error eliminando API key de Gemini: ${e.message}`);
+      setError(`Error eliminando la API key: ${e.message}`);
     }
   };
 
@@ -119,14 +96,15 @@ export default function Config({ uid, admins = {} }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">⚙️ Configuración</h1>
-          <p className="page-sub">Integraciones y API keys</p>
+          <p className="page-sub">Configuración del sistema · solo administradores</p>
         </div>
       </div>
 
       <div className="section-block">
-        <h2 className="section-title">🤖 Groq API</h2>
+        <h2 className="section-title">🤖 Inteligencia artificial (Groq)</h2>
         <p className="section-desc">
-          Para hacer preguntas rápidas sobre tu presupuesto. También usamos Gemini Vision para analizar fotos de comprobantes.
+          Esta clave la usan <strong>todos los usuarios</strong> de la app para leer comprobantes y para Preguntas IA.
+          Los usuarios no ven esta pantalla.
         </p>
 
         {error && (
@@ -155,7 +133,7 @@ export default function Config({ uid, admins = {} }) {
               </button>
             </div>
             <p className="config-hint">
-              Obtén una key gratis en{' '}
+              Obtené una key en{' '}
               <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer">
                 Groq Console
               </a>
@@ -168,136 +146,49 @@ export default function Config({ uid, admins = {} }) {
               type="text"
               className="config-input"
               value={groqUrl}
-              placeholder="https://api.groq.com/openai/v1"
+              placeholder={URL_DEFAULT}
               onChange={(e) => { setGroqUrl(e.target.value); setError(''); }}
             />
-            <p className="config-hint">Endpoint de la API (por defecto: https://api.groq.com/openai/v1)</p>
+            <p className="config-hint">Endpoint de la API (por defecto: {URL_DEFAULT})</p>
           </div>
 
           <div className="config-field">
-            <label>Modelo de Groq</label>
+            <label>Modelo de Groq para Preguntas IA</label>
             <input
               type="text"
               className="config-input"
               value={groqModel}
-              placeholder="openai/gpt-oss-120b"
+              placeholder={MODELO_DEFAULT}
               onChange={(e) => { setGroqModel(e.target.value); setError(''); }}
             />
-            <p className="config-hint">Modelos disponibles: openai/gpt-oss-120b, openai/gpt-oss-20b, groq/compound</p>
-          </div>
-
-          <div className="config-actions">
-            <button className="btn-primary" onClick={guardar}>
-              {saved ? (
-                <>
-                  <Check size={16} /> Guardado
-                </>
-              ) : (
-                '💾 Guardar'
-              )}
-            </button>
-            {groqApiKey && (
-              <button className="btn-secondary" onClick={eliminarGroq}>
-                <Trash2 size={16} /> Eliminar Groq
-              </button>
-            )}
-          </div>
-        </div>
-
-        {groqApiKey && (
-          <div className="alert alert-info">
-            ✓ Groq está configurado. Podrás hacer preguntas sobre tu presupuesto en el chat.
-          </div>
-        )}
-      </div>
-
-      <div className="section-block">
-        <h2 className="section-title">📷 Google Gemini Vision API</h2>
-        <p className="section-desc">
-          Para analizar fotos de comprobantes y desglosar automáticamente las compras.
-        </p>
-
-        <div className="config-form">
-          <div className="config-field">
-            <label>API Key de Gemini</label>
-            <div className="config-input-group">
-              <input
-                type={showGeminiKey ? 'text' : 'password'}
-                className="config-input"
-                value={geminiApiKey}
-                placeholder="AIza... o AQ..."
-                onChange={(e) => { setGeminiApiKey(e.target.value); setError(''); }}
-              />
-              <button
-                className="config-toggle-btn"
-                onClick={() => setShowGeminiKey(!showGeminiKey)}
-                title={showGeminiKey ? 'Ocultar' : 'Mostrar'}
-              >
-                {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
             <p className="config-hint">
-              Obtén una key gratis en{' '}
-              <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
-                Google AI Studio
-              </a>
+              Debe soportar herramientas (tool calling), por ejemplo openai/gpt-oss-120b. La lectura de comprobantes usa
+              siempre un modelo con visión.
             </p>
           </div>
 
           <div className="config-actions">
             <button className="btn-primary" onClick={guardar}>
-              {saved ? (
-                <>
-                  <Check size={16} /> Guardado
-                </>
-              ) : (
-                '💾 Guardar'
-              )}
+              {saved ? <><Check size={16} /> Guardado</> : '💾 Guardar para todos'}
             </button>
-            {geminiApiKey && (
-              <button className="btn-secondary" onClick={eliminarGemini}>
-                <Trash2 size={16} /> Eliminar Gemini
+            {esGlobal && (
+              <button className="btn-secondary" onClick={eliminar}>
+                <Trash2 size={16} /> Eliminar clave
               </button>
             )}
           </div>
         </div>
 
-        {geminiApiKey && (
+        {esGlobal ? (
           <div className="alert alert-info">
-            ✓ Gemini está configurado. Podrás analizar comprobantes en la pantalla principal.
+            ✓ La IA está activa para todos los usuarios.
+          </div>
+        ) : (
+          <div className="alert alert-warning">
+            Todavía no hay una clave del sistema. {groqApiKey && 'Se precargó tu clave personal: '}
+            tocá <strong>Guardar para todos</strong> para activar la IA para todos los usuarios.
           </div>
         )}
-
-        <div className={`alert alert-${isAdmin ? 'info' : 'warning'}`}>
-          {isAdmin ? (
-            <>✓ Sos admin de esta app. Tenés acceso a todas las configuraciones.</>
-          ) : (
-            <>Guardando una API key de Gemini te hace admin automáticamente.</>
-          )}
-        </div>
-      </div>
-
-      <div className="section-block">
-        <h2 className="section-title">📝 Sobre esta pantalla</h2>
-        <p className="section-desc">
-          La API key se guarda en Firebase en <code>config/{'{uid}'}/groq_api_key</code>.
-          <br />
-          <strong>⚠️ Importante:</strong> Con las reglas de Firebase actuales (abiertas), cualquiera que conozca tu URL
-          de base puede leerla. Después de guardar, vamos a bajar las reglas para proteger esta sección.
-        </p>
-      </div>
-
-      <div className="section-block">
-        <h2 className="section-title">👤 Admin</h2>
-        <p className="section-desc">
-          Los admins se registran en Firebase en <code>admins/{'{uid}'}</code>.
-          <br />
-          {isAdmin ? (
-            <>✓ <strong>Sos admin.</strong> Tu UID está guardado en la base.</>
-          ) : (
-            <>No sos admin todavía. Guardar la API key te hace admin automáticamente.</>
-          )}
-        </p>
       </div>
     </div>
   );

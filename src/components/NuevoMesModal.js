@@ -1,8 +1,8 @@
 // src/components/NuevoMesModal.js
 import React, { useState } from 'react';
+import { money } from '../moneda';
 import { CalendarPlus, X } from 'lucide-react';
 
-const fmt = (n) => new Intl.NumberFormat('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0, useGrouping: false }).format(n || 0);
 
 export default function NuevoMesModal({ mesLabel, userTemplates = [], onConfirm, onCancel }) {
   const [templateId, setTemplateId] = useState(userTemplates[0]?.id || '');
@@ -66,7 +66,7 @@ export default function NuevoMesModal({ mesLabel, userTemplates = [], onConfirm,
               placeholder="0"
               autoFocus={userTemplates.length === 0}
             />
-            {objetivo > 0 && <span className="nmes-hint">${fmt(objetivo)}</span>}
+            {objetivo > 0 && <span className="nmes-hint">{money(objetivo)}</span>}
           </div>
         </div>
 
