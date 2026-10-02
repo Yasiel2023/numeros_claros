@@ -1541,6 +1541,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 @media (max-width: 480px) {
   .ob-card { padding: 24px 18px; }
 }
+.nueva-cat-modal { max-width: 440px; }
+.nueva-cat-desc { font-size: 13px; color: var(--text2); line-height: 1.45; margin: 0 0 10px; }
+.nueva-cat-iconos { display: flex; flex-wrap: wrap; gap: 2px; max-height: 120px; overflow-y: auto; margin-bottom: 10px; padding: 4px; border: 1px solid var(--border2); border-radius: 8px; }
+.nueva-cat-label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text3); margin: 10px 0 4px; }
+.nueva-cat-error { color: var(--red); font-size: 13px; margin: 6px 0 0; }
+.nav-item-nueva { color: var(--teal); font-weight: 600; }
+.nav-item-nueva:hover { background: var(--teal-l); color: var(--teal-d); }
+
 .presup-moneda-btn { font-size: 11px; font-weight: 800; min-width: 26px; }
 .presup-moneda-aviso { font-size: 12.5px; color: var(--text2); line-height: 1.45; margin: 0 0 12px; padding: 8px 10px; background: #fef3c7; border-radius: 8px; }
 

@@ -15,7 +15,7 @@ import { armarPresupuesto } from '../ia';
 import SelectorMonedas from './SelectorMonedas';
 import { MONEDA_DEFAULT, MONEDA2_DEFAULT, moneyDe } from '../moneda';
 
-const ICONOS_RAPIDOS = [
+export const ICONOS_RAPIDOS = [
   // Hogar
   '🏠','🛋️','💡','🚿','🔥','🧹','🔒','🔨',
   // Transporte
@@ -46,7 +46,7 @@ function toArray(val) {
   return Object.keys(val).sort((a, b) => Number(a) - Number(b)).map(k => val[k]);
 }
 
-function genId(nombre) {
+export function genId(nombre) {
   return nombre
     .toLowerCase()
     .normalize('NFD')

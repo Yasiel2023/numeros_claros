@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import Ingresos from './components/Ingresos';
-import GrupoGastos, { toPeriodos, aplicarPagoTarjeta } from './components/GrupoGastos';
+import GrupoGastos, { aplicarPagoTarjeta, periodosDelMes, esPeriodo } from './components/GrupoGastos';
 import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
@@ -25,6 +25,8 @@ import Config from './components/Config';
 import FlujoDesglose from './components/FlujoDesglose';
 import Comprobantes from './components/Comprobantes';
 import SelectorMonedas from './components/SelectorMonedas';
+import NuevaCategoriaModal from './components/NuevaCategoriaModal';
+import { genId } from './components/OnboardingWizard';
 import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS } from './moneda';
 import Chat from './components/Chat';
 import './App.css';
@@ -47,9 +49,11 @@ function normalizeMesData(raw) {
     gastos = Object.fromEntries(
       Object.keys(raw.gastos).map(k => {
         const arr = toArray(raw.gastos[k]);
-        // Formato nuevo: array de periodos, cada uno con .items
-        if (arr.length > 0 && arr[0] !== null && typeof arr[0] === 'object' && 'items' in arr[0]) {
-          return [k, arr.map(p => ({ ...p, items: toArray(p.items || []) }))];
+        // Formato nuevo: array de periodos (RTDB borra "items" si está vacío).
+        // Se descartan "items" que en realidad son períodos: los dejaba un bug viejo
+        // que confundía un período vacío con un gasto suelto.
+        if (arr.length > 0 && esPeriodo(arr[0])) {
+          return [k, arr.map(p => ({ ...p, items: toArray(p.items || []).filter(i => i && !esPeriodo(i)) }))];
         }
         // Formato viejo: items planos — GrupoGastos.toPeriodos() los envuelve
         return [k, arr];
@@ -160,6 +164,7 @@ function AppInterna() {
   // que todos los componentes formateen con ellas (ver src/moneda.js).
   const [monedasActivas, setMonedasActivas] = useState({ principal: MONEDA_DEFAULT, secundaria: MONEDA2_DEFAULT });
   configurarMonedas(monedasActivas.principal, monedasActivas.secundaria);
+  const [showNuevaCategoria, setShowNuevaCategoria] = useState(false);
   const [showMonedaModal, setShowMonedaModal] = useState(false);
   const [monedaEdit, setMonedaEdit] = useState(null);       // { moneda, moneda2 } en edición
   const [guardandoMoneda, setGuardandoMoneda] = useState(false);
@@ -209,6 +214,8 @@ function AppInterna() {
       emoji:   g.icono || null,
       grupoId: g.id,
     })),
+    // Acción (no vista): agregar una categoría a mitad de mes
+    { key: '__nueva_categoria', label: 'Nueva categoría', emoji: '➕', accion: true },
     // Configuración (clave de IA del sistema) solo para admins
     ...NAV_FIJOS_FIN.filter(n => n.key !== 'config' || admins?.[user?.uid] === true),
   ];
@@ -384,6 +391,24 @@ function AppInterna() {
     setPresupuestos([nuevo]);
     setPresupuestoActual(id);
     setShowOnboarding(false);
+  };
+
+  // ── Agregar una categoría de gastos en cualquier momento ─────────
+  // Se suma a _defaults (aparece en el menú de todos los meses y en los meses nuevos)
+  // y, si el mes actual existe, se le agregan sus períodos vacíos.
+  const agregarCategoria = async ({ icono, nombre, frecuencia }) => {
+    const nueva = { id: genId(nombre), nombre, icono, frecuencia, items: [] };
+    const lista = [...gruposDB, nueva];
+    await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_defaults/grupos_gastos`), lista);
+    setDefaults(prev => ({ ...(prev || {}), grupos_gastos: lista }));
+    if (mesData) {
+      updateMesData({
+        ...mesData,
+        gastos: { ...(mesData.gastos || {}), [nueva.id]: periodosDelMes(null, nueva, año, mes) },
+      });
+    }
+    setShowNuevaCategoria(false);
+    setVista(`grupo_${nueva.id}`);
   };
 
   // ── Cambiar las monedas del presupuesto activo (solo dueño) ─────
@@ -637,7 +662,7 @@ function AppInterna() {
         datosTarjeta = { tarjetaId, tarjetaMonto: a.monto, ...(esDebito ? { tarjetaMovId: res.movId } : {}) };
       }
 
-      const periodos = toPeriodos(gastos[a.grupoId] || []);
+      const periodos = periodosDelMes(gastos[a.grupoId], grupos.find(g => g.id === a.grupoId), año, mes);
       gastos[a.grupoId] = periodos.map(p => {
         if (p.numero !== a.periodoNumero) return p;
         const items = [...(p.items || [])];
@@ -677,7 +702,7 @@ function AppInterna() {
     }
 
     updateMesData({ ...mesData, gastos, tarjetas, comprobantes });
-  }, [mesData, updateMesData]);
+  }, [mesData, updateMesData, grupos, año, mes]);
 
   // ── Tarjetas del último mes anterior que tenga alguna (hasta 12 meses atrás) ──
   const buscarTarjetasPrevias = useCallback(async () => {
@@ -865,6 +890,15 @@ function AppInterna() {
           )}
         </div>
 
+        {/* Modal nueva categoría */}
+        {showNuevaCategoria && (
+          <NuevaCategoriaModal
+            nombresExistentes={grupos.map(g => g.nombre).concat(gruposDB.map(g => g.nombre))}
+            onCrear={agregarCategoria}
+            onClose={() => setShowNuevaCategoria(false)}
+          />
+        )}
+
         {/* Modal moneda del presupuesto (solo dueño) */}
         {showMonedaModal && monedaEdit && (
           <div className="presup-modal-overlay" onClick={() => !guardandoMoneda && setShowMonedaModal(false)}>
@@ -1004,9 +1038,14 @@ function AppInterna() {
         )}
 
         <nav className="sidebar-nav">
-          {NAV.map(({ key, label, icon: Icon, emoji }) => (
-            <button key={key} className={`nav-item ${vista === key ? 'active' : ''}`}
-              onClick={() => { setVista(key); closeSidebar(); }}>
+          {NAV.map(({ key, label, icon: Icon, emoji, accion }) => (
+            <button key={key} className={`nav-item ${accion ? 'nav-item-nueva' : ''} ${vista === key ? 'active' : ''}`}
+              disabled={accion && !defaults}
+              onClick={() => {
+                if (accion) setShowNuevaCategoria(true);
+                else setVista(key);
+                closeSidebar();
+              }}>
               {emoji
                 ? <span className="nav-emoji">{emoji}</span>
                 : <Icon size={16}/>}
@@ -1161,7 +1200,7 @@ function AppInterna() {
                     </div>
                     <GrupoGastos
                       grupo={grupo}
-                      data={mesData?.gastos?.[grupoId]}
+                      data={periodosDelMes(mesData?.gastos?.[grupoId], grupo, año, mes)}
                       tarjetas={mesData?.tarjetas || []}
                       onChange={(periodos, tarjetas) =>
                         updateMesData({

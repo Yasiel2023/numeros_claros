@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { money, money2 } from '../moneda';
 import { AlertCircle, CheckCircle2, Loader, Camera } from 'lucide-react';
-import { toPeriodos, tarjetasDisponibles, saldoActualDebito } from './GrupoGastos';
+import { periodosDelMes, tarjetasDisponibles, saldoActualDebito } from './GrupoGastos';
 import { sugerirMatches } from '../ia';
 
 
@@ -64,7 +64,8 @@ export default function AplicarDesglose({
     return res;
   }, [desglose.items, hayDescuento, repartirDescuento, totalPagado, sumaItems]);
 
-  const periodosDe = (grupoId) => toPeriodos(mesData?.gastos?.[grupoId] || []);
+  const periodosDe = (grupoId) =>
+    periodosDelMes(mesData?.gastos?.[grupoId], grupos.find(g => g.id === grupoId), año, mes);
 
   const itemsDe = (grupoId, periodoNumero) =>
     periodosDe(grupoId).find(p => p.numero === periodoNumero)?.items || [];

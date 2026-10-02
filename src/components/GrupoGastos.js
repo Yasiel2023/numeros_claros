@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { money, esSecundaria, simbolo } from '../moneda';
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { getPeriodosLabel } from '../constants';
 
 const fmtFechaHora = () => {
   const d = new Date();
@@ -87,13 +88,24 @@ const esPeriodoActual = (periodo, frecuencia, anio, mes) => {
 };
 
 // --- Detecta si el array es de periodos (nuevo) o de items directos (viejo) ---
+// Un período tiene items, o al menos numero + label: RTDB borra los arrays vacíos,
+// así que un período sin gastos vuelve de la base como { numero, label } sin items.
+export const esPeriodo = (p) =>
+  p !== null && typeof p === 'object' && ('items' in p || ('numero' in p && 'label' in p && !('nombre' in p)));
+
 function isPeriodoArray(arr) {
-  return (
-    arr.length > 0 &&
-    arr[0] !== null &&
-    typeof arr[0] === 'object' &&
-    'items' in arr[0]
-  );
+  return arr.length > 0 && esPeriodo(arr[0]);
+}
+
+export const frecuenciaDe = (grupo) =>
+  grupo?.frecuencia || (grupo?.tipo === 'semanas' ? 'semanal' : 'mensual');
+
+// Períodos de una categoría en un mes. Si el mes todavía no tiene datos de la
+// categoría (ej. una categoría agregada a mitad de mes, o vista en un mes viejo),
+// se generan vacíos según su frecuencia en lugar de un único período "Mes".
+export function periodosDelMes(data, grupo, anio, mes) {
+  if (Array.isArray(data) && data.length > 0) return toPeriodos(data);
+  return getPeriodosLabel(frecuenciaDe(grupo), anio, mes).map(p => ({ numero: p.numero, label: p.label, items: [] }));
 }
 
 // Normaliza data a array de periodos siempre
