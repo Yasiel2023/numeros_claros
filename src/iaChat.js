@@ -10,6 +10,7 @@ import { toPeriodos } from './components/GrupoGastos';
 import { idsCredito, cuentaComoGastoReal, pagadoTarjeta, saldoTarjeta, previstoPropioTarjeta } from './tarjetas';
 import { numeroCuota, estaActiva } from './financiaciones';
 import { MONEDAS, monedaPrincipal, monedaSecundaria, monedaDe, esSecundaria } from './moneda';
+import { llamarIA } from './iaCliente';
 
 const MAX_RONDAS = 4;      // máximo de idas y vueltas con herramientas por pregunta
 const MAX_MESES  = 12;     // máximo de meses por llamada a una herramienta
@@ -499,26 +500,17 @@ const EJECUTORES = {
   },
 };
 
-// ── Llamada a Groq y ciclo de herramientas ───────────────────────────────────
-async function llamarGroq({ apiKey, url, modelo }, mensajes, conHerramientas) {
-  const response = await fetch(`${url}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: modelo,
-      messages: mensajes,
-      ...(conHerramientas ? { tools: HERRAMIENTAS, tool_choice: 'auto' } : {}),
-      temperature: 0.2,
-      max_completion_tokens: 4096,
-    }),
+// ── Llamada a la IA (vía Cloud Function) y ciclo de herramientas ─────────────
+// El modelo del chat lo define el admin en Configuración (sistema/ia/groq_model).
+async function llamarGroq(_groq, mensajes, conHerramientas) {
+  const choice = await llamarIA({
+    tipo: 'chat',
+    messages: mensajes,
+    ...(conHerramientas ? { tools: HERRAMIENTAS, tool_choice: 'auto' } : {}),
+    temperature: 0.2,
+    max_completion_tokens: 4096,
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    if (response.status === 429) throw new Error('Se alcanzó el límite de uso de Groq. Esperá un minuto y probá de nuevo.');
-    throw new Error(`Error de Groq: ${err.error?.message || response.statusText}`);
-  }
-  const result = await response.json();
-  return result.choices?.[0]?.message || {};
+  return choice.message || {};
 }
 
 function parsearRespuesta(texto) {

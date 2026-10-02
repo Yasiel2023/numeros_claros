@@ -1,12 +1,10 @@
 // src/ia.js
-// Lectura de comprobantes, sugerencia de matches y armado de presupuestos con
-// Groq (API compatible con OpenAI). La clave es la del sistema (sistema/ia).
+// Lectura de comprobantes, sugerencia de matches y armado de presupuestos con IA.
+// Las llamadas pasan por la Cloud Function "ia" (ver iaCliente.js), que usa un
+// modelo con visión y la clave del sistema.
 
 import { MONEDAS, MONEDA_DEFAULT } from './moneda';
-
-const GROQ_URL_DEFAULT = 'https://api.groq.com/openai/v1';
-// Modelo con soporte de imágenes. Es independiente del modelo elegido para el chat.
-const GROQ_MODELO_VISION = 'qwen/qwen3.8-27b';
+import { llamarIA } from './iaCliente';
 
 // Achica la foto antes de enviarla: Groq acepta hasta 4MB en base64 y una foto
 // de celular suele pasarse. Además la consulta responde más rápido.
@@ -43,47 +41,22 @@ function parsearJSON(text) {
   }
 }
 
-// Llama a Groq en modo JSON y devuelve el objeto parseado.
-// ia: { apiKey, url }. imagen: data URL opcional.
-async function llamarGroq(prompt, imagen, ia) {
-  if (!ia?.apiKey) throw new Error('Configurá tu API key de Groq en Configuración');
-
+// Pide a la IA (modelo con visión) una respuesta en modo JSON y devuelve el objeto
+// parseado. imagen: data URL opcional. El parámetro "ia" ya no lleva la clave: se
+// conserva para no cambiar las firmas que usan los componentes.
+async function llamarGroq(prompt, imagen, _ia) {
   const content = imagen
     ? [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: imagen } }]
     : prompt;
 
-  const body = JSON.stringify({
-    model: GROQ_MODELO_VISION,
+  // Los reintentos ante saturación los hace la función en el servidor
+  const choice = await llamarIA({
+    tipo: 'vision',
     messages: [{ role: 'user', content }],
     response_format: { type: 'json_object' },
     temperature: 0.1,
     max_completion_tokens: 8192,
   });
-
-  // Ante saturación (503) o límite de uso (429) se reintenta con espera creciente
-  const ESPERAS_MS = [1500, 4000, 8000];
-  let response;
-  for (let intento = 0; ; intento++) {
-    response = await fetch(`${ia.url || GROQ_URL_DEFAULT}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${ia.apiKey}` },
-      body,
-    });
-    const reintentable = response.status === 503 || response.status === 429 || response.status === 500;
-    if (response.ok || !reintentable || intento >= ESPERAS_MS.length) break;
-    await new Promise(r => setTimeout(r, ESPERAS_MS[intento]));
-  }
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    if (response.status === 503 || response.status === 429) {
-      throw new Error('El servicio de IA está saturado o se alcanzó el límite de uso. Esperá un minuto y probá de nuevo.');
-    }
-    throw new Error(`Error de Groq: ${error.error?.message || response.statusText}`);
-  }
-
-  const result = await response.json();
-  const choice = result.choices?.[0];
   if (choice?.finish_reason === 'length') {
     throw new Error('La respuesta de la IA quedó cortada. Probá de nuevo o con una foto más recortada.');
   }

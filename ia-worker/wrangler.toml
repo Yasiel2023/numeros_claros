@@ -1,0 +1,13 @@
+# Worker proxy de IA de Números Claros (ver src/index.js)
+name = "numeros-claros-ia"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+# Límite por usuario: 20 consultas por minuto (una pregunta del chat usa hasta 5)
+[[ratelimits]]
+name = "LIMITADOR"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+# La clave de Groq NO va acá: es un secreto.
+#   npx wrangler secret put GROQ_API_KEY

@@ -245,25 +245,22 @@ function AppInterna() {
     cargarAdmins();
   }, []);
 
-  // ── Cargar configuración de Groq ──────────────────────────
-  // La clave es una sola para todo el sistema (sistema/ia, la carga el admin).
-  // Si todavía no existe, se usa la clave propia del usuario (config/{uid}), si tiene.
+  // ── Disponibilidad de la IA ───────────────────────────────
+  // La clave vive en el servidor (sistema_privado, solo la lee la Cloud Function "ia").
+  // El cliente solo lee sistema/ia/activa para saber si mostrar las funciones de IA.
+  // groqApiKey queda como "bandera": no vacío = IA disponible.
   const cargarGroqConfig = useCallback(async () => {
     if (!user?.uid) return;
-    const leer = async (ruta) => {
-      try {
-        const snap = await get(ref(db, ruta));
-        return snap.exists() ? snap.val() : null;
-      } catch (e) {
-        console.error(`Error leyendo ${ruta}:`, e);
-        return null;
-      }
-    };
-    const global = await leer('sistema/ia');
-    const cfg = global?.groq_api_key ? global : await leer(`config/${user.uid}`);
-    setGroqApiKey(cfg?.groq_api_key || '');
-    if (cfg?.groq_url) setGroqUrl(cfg.groq_url);
-    if (cfg?.groq_model) setGroqModel(cfg.groq_model);
+    try {
+      const snap = await get(ref(db, 'sistema/ia'));
+      const cfg = snap.exists() ? snap.val() : {};
+      setGroqApiKey(cfg.activa === true ? 'servidor' : '');
+      if (cfg.groq_url) setGroqUrl(cfg.groq_url);
+      if (cfg.groq_model) setGroqModel(cfg.groq_model);
+    } catch (e) {
+      console.error('Error leyendo sistema/ia:', e);
+      setGroqApiKey('');
+    }
   }, [user?.uid]);
 
   useEffect(() => { cargarGroqConfig(); }, [cargarGroqConfig]);
