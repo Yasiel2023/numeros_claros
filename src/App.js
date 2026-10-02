@@ -1,5 +1,6 @@
 ﻿// src/App.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { ref, get, set, remove, update } from 'firebase/database';
 // encodeEmail: '.' → ',' para claves RTDB
 const encodeEmail = (email) => email.replace(/\./g, ',');
@@ -30,6 +31,10 @@ import { genId } from './components/OnboardingWizard';
 import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS } from './moneda';
 import Chat from './components/Chat';
 import './App.css';
+
+// Dibuja los modales directamente en <body>. Si se renderizan dentro del sidebar,
+// en el celular su transform los posiciona relativos al menú y no a la pantalla.
+const Portal = ({ children }) => createPortal(children, document.body);
 
 // ── Helpers para normalizar arrays desde RTDB ─────────────────
 // RTDB puede devolver arrays como objetos con claves numéricas
@@ -846,6 +851,10 @@ function AppInterna() {
         <div className="sidebar-brand">
           <span className="sb-icon">🏠</span>
           <span className="sb-name">Números Claros</span>
+          {/* En el celular el menú ocupa toda la pantalla: botón para cerrarlo */}
+          <button className="sidebar-close-btn" onClick={closeSidebar} aria-label="Cerrar menú">
+            <X size={20} />
+          </button>
         </div>
 
         {/* Selector de presupuesto */}
@@ -892,15 +901,18 @@ function AppInterna() {
 
         {/* Modal nueva categoría */}
         {showNuevaCategoria && (
-          <NuevaCategoriaModal
-            nombresExistentes={grupos.map(g => g.nombre).concat(gruposDB.map(g => g.nombre))}
-            onCrear={agregarCategoria}
-            onClose={() => setShowNuevaCategoria(false)}
-          />
+          <Portal>
+            <NuevaCategoriaModal
+              nombresExistentes={grupos.map(g => g.nombre).concat(gruposDB.map(g => g.nombre))}
+              onCrear={agregarCategoria}
+              onClose={() => setShowNuevaCategoria(false)}
+            />
+          </Portal>
         )}
 
         {/* Modal moneda del presupuesto (solo dueño) */}
         {showMonedaModal && monedaEdit && (
+          <Portal>
           <div className="presup-modal-overlay" onClick={() => !guardandoMoneda && setShowMonedaModal(false)}>
             <div className="presup-modal" onClick={e => e.stopPropagation()}>
               <div className="presup-modal-header">
@@ -927,6 +939,7 @@ function AppInterna() {
               </div>
             </div>
           </div>
+          </Portal>
         )}
 
         {/* Banner de invitaciones pendientes */}
@@ -958,17 +971,20 @@ function AppInterna() {
 
         {/* Modal compartir presupuesto */}
         {showCompartirModal && presupuestoActual && (
-          <CompartirModal
-            presupuestoId={presupuestoActual}
-            presupuestoNombre={presupuestos.find(p => p.id === presupuestoActual)?.nombre || presupuestoActual}
-            ownerUid={user.uid}
-            ownerEmail={user.email}
-            onClose={() => setShowCompartirModal(false)}
-          />
+          <Portal>
+            <CompartirModal
+              presupuestoId={presupuestoActual}
+              presupuestoNombre={presupuestos.find(p => p.id === presupuestoActual)?.nombre || presupuestoActual}
+              ownerUid={user.uid}
+              ownerEmail={user.email}
+              onClose={() => setShowCompartirModal(false)}
+            />
+          </Portal>
         )}
 
         {/* Modal nuevo presupuesto */}
         {showNuevoModal && (
+          <Portal>
           <div className="presup-modal-overlay" onClick={() => setShowNuevoModal(false)}>
             <div className="presup-modal" onClick={e => e.stopPropagation()}>
               <div className="presup-modal-header">
@@ -1019,6 +1035,7 @@ function AppInterna() {
               </div>
             </div>
           </div>
+          </Portal>
         )}
         <div className="mes-selector">
           <button className="mes-nav-btn" onClick={mesAnterior}><ChevronLeft size={16}/></button>
