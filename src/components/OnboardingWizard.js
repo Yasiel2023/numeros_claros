@@ -13,30 +13,9 @@ import { db } from '../firebase';
 import { FRECUENCIAS_GRUPO } from '../constants';
 import { armarPresupuesto } from '../ia';
 import SelectorMonedas from './SelectorMonedas';
+import Icono, { IconoCategoria, SelectorIconoCategoria, estiloCategoria } from '../iconos';
 import { MONEDA_DEFAULT, MONEDA2_DEFAULT, moneyDe } from '../moneda';
 
-export const ICONOS_RAPIDOS = [
-  // Hogar
-  '🏠','🛋️','💡','🚿','🔥','🧹','🔒','🔨',
-  // Transporte
-  '🚗','🚌','⛽','🛣️','🚲','✈️',
-  // Finanzas
-  '💰','💳','💵','💸','💹','🏦','📈','📉','🧾','📋','💼','📦',
-  // Alimentacion
-  '🛒','🍔','🍴','🍽️','🥐','🍷','🍵',
-  // Salud
-  '💊','🏥','🧬','🦷','👁️','🏋️',
-  // Educacion
-  '📚','🎓','💻','📱','🖥️',
-  // Ocio
-  '🎮','🎭','🎧','📺','🎨','🤺','🚢',
-  // Personal
-  '👜','💄','🧴','✂️',
-  // Familia
-  '👶','🏫','🐾','🎁',
-  // Servicios
-  '📜','🛡️','📞','🌐','🚑',
-];
 
 
 // --- Helpers --------------------------------------------------
@@ -94,7 +73,7 @@ function Paso0({ ia, monedas, onMonedas, onPlantilla, onPropuestaIA }) {
 
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">👋</div>
+      <div className="ob-step-icon"><Icono nombre="casa" size={28} /></div>
       <h2 className="ob-step-title">¿Cómo querés empezar?</h2>
       <p className="ob-step-desc">
         Podés partir de una plantilla con los gastos más comunes, o contarle a la IA cómo es tu hogar
@@ -105,7 +84,7 @@ function Paso0({ ia, monedas, onMonedas, onPlantilla, onPropuestaIA }) {
 
       <div className="ob-inicio-opciones">
         <button className="ob-inicio-opcion" onClick={onPlantilla} disabled={armando}>
-          <span className="ob-inicio-icono">📋</span>
+          <span className="ob-inicio-icono"><Icono nombre="documento" size={22} /></span>
           <span className="ob-inicio-texto">
             <strong>Usar la plantilla sugerida</strong>
             <small>Fijos, impuestos, supermercado y más. Lo ajustás después.</small>
@@ -116,7 +95,7 @@ function Paso0({ ia, monedas, onMonedas, onPlantilla, onPropuestaIA }) {
         {ia?.apiKey && (
           <div className={`ob-inicio-opcion ob-inicio-ia${modoIA ? ' abierta' : ''}`}>
             <button className="ob-inicio-opcion-head" onClick={() => setModoIA(m => !m)} disabled={armando}>
-              <span className="ob-inicio-icono">✨</span>
+              <span className="ob-inicio-icono"><Icono nombre="chat" size={22} /></span>
               <span className="ob-inicio-texto">
                 <strong>Armalo con IA</strong>
                 <small>Contá cómo es tu hogar o subí una foto de tu planilla actual.</small>
@@ -181,7 +160,7 @@ function Paso0({ ia, monedas, onMonedas, onPlantilla, onPropuestaIA }) {
 function AvisoIA({ notas, onUsarPlantilla }) {
   return (
     <div className="ob-aviso-ia">
-      <strong>✨ Propuesta armada por la IA.</strong> Revisala: podés cambiar, quitar o agregar lo que quieras.
+      <strong>Propuesta armada por la IA.</strong> Revisala: podés cambiar, quitar o agregar lo que quieras.
       Los montos previstos los completás vos (ahora o después, cada mes).
       {notas && <span className="ob-aviso-notas">{notas}</span>}
       {onUsarPlantilla && (
@@ -201,7 +180,7 @@ function GrupoFila({ grupo, onUpdate, onDelete }) {
 
   return (
     <div className="ob-grupo-row">
-      <span className="ob-grupo-icono">{grupo.icono}</span>
+      <IconoCategoria grupo={grupo} size={34} />
       {editando ? (
         <>
           <input
@@ -238,13 +217,13 @@ function GrupoFila({ grupo, onUpdate, onDelete }) {
 function AgregarGrupoForm({ onAdd }) {
   const [show, setShow]           = useState(false);
   const [nombre, setNombre]       = useState('');
-  const [icono, setIcono]         = useState('📦');
+  const [icono, setIcono]         = useState('');
   const [frecuencia, setFrecuencia] = useState('mensual');
 
   const add = () => {
     if (!nombre.trim()) return;
     onAdd({ id: genId(nombre), nombre: nombre.trim(), icono, frecuencia, items: [] });
-    setNombre(''); setIcono('📦'); setFrecuencia('mensual'); setShow(false);
+    setNombre(''); setIcono(''); setFrecuencia('mensual'); setShow(false);
   };
 
   if (!show) return (
@@ -255,15 +234,7 @@ function AgregarGrupoForm({ onAdd }) {
 
   return (
     <div className="ob-nuevo-grupo-form">
-      <div className="ob-iconos-row">
-        {ICONOS_RAPIDOS.map(ic => (
-          <button
-            key={ic}
-            className={`ob-icono-opt${icono === ic ? ' selected' : ''}`}
-            onClick={() => setIcono(ic)}
-          >{ic}</button>
-        ))}
-      </div>
+      <SelectorIconoCategoria valor={icono} onChange={setIcono} />
       <div className="ob-nuevo-grupo-inputs">
         <input
           className="ob-input"
@@ -292,7 +263,7 @@ function AgregarGrupoForm({ onAdd }) {
 function Paso1({ grupos, onChange, onBack, onNext, aviso }) {
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">🗂️</div>
+      <div className="ob-step-icon"><Icono nombre="gastos" size={28} /></div>
       <h2 className="ob-step-title">Grupos de gastos</h2>
       <p className="ob-step-desc">
         Definí cómo se organiza tu presupuesto. Cada grupo tiene una
@@ -422,7 +393,7 @@ function Paso2({ grupos, onChange, onBack, onNext, aviso }) {
 
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">📝</div>
+      <div className="ob-step-icon"><Icono nombre="recibo" size={28} /></div>
       <h2 className="ob-step-title">Items por grupo</h2>
       <p className="ob-step-desc">
         Agregá los gastos habituales de cada grupo. Los montos previstos son opcionales:
@@ -439,7 +410,7 @@ function Paso2({ grupos, onChange, onBack, onNext, aviso }) {
             className={`ob-group-tab${grupoActivo === idx ? ' active' : ''}`}
             onClick={() => setGrupoActivo(idx)}
           >
-            {g.icono} {g.nombre}
+            <Icono nombre={estiloCategoria(g).icono} size={15} /> {g.nombre}
             {(g.items || []).length > 0 && (
               <span className="ob-tab-count">{g.items.length}</span>
             )}
@@ -478,7 +449,7 @@ function Paso3({ nombre, onChange, monedas, onMonedas, grupos, onBack, onConfirm
 
   return (
     <div className="ob-step">
-      <div className="ob-step-icon">💼</div>
+      <div className="ob-step-icon"><Icono nombre="ingresos" size={28} /></div>
       <h2 className="ob-step-title">Nombre del presupuesto</h2>
       <p className="ob-step-desc">
         Poné un nombre para identificar este presupuesto.
@@ -505,7 +476,7 @@ function Paso3({ nombre, onChange, monedas, onMonedas, grupos, onBack, onConfirm
         <div className="ob-resumen-title">Resumen de la plantilla</div>
         {grupos.map(g => (
           <div key={g.id} className="ob-resumen-grupo">
-            <span className="ob-resumen-grupo-nombre">{g.icono} {g.nombre}</span>
+            <span className="ob-resumen-grupo-nombre"><IconoCategoria grupo={g} size={26} /> {g.nombre}</span>
             <span className="ob-grupo-tipo-badge">
               {FRECUENCIAS_GRUPO.find(f => f.value === g.frecuencia)?.label}
             </span>

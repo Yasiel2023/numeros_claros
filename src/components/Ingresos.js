@@ -62,7 +62,7 @@ export default function Ingresos({ data, onChange }) {
   return (
     <div className="section-block">
       <div className="section-header">
-        <h2 className="section-title">💼 Ingresos</h2>
+        <h2 className="section-title">Ingresos</h2>
         <button className="btn-add-row" onClick={() => setShowAdd(!showAdd)}>
           <Plus size={14}/> Agregar ingreso
         </button>

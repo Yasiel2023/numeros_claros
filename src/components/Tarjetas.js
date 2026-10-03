@@ -7,6 +7,9 @@ import { Plus, Trash2, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus, 
 import { MESES_ES } from '../constants';
 import { numeroCuota, estaActiva } from '../financiaciones';
 import { pagadoTarjeta, saldoTarjeta, gastosDeTarjeta, montoCargado } from '../tarjetas';
+import useEsMovil from '../useEsMovil';
+import TarjetasMovil from './TarjetasMovil';
+import Icono from '../iconos';
 
 // Opciones de moneda para tarjetas y cuotas: la principal y, si hay, la secundaria
 const OpcionesMoneda = () => monedasDisponibles().map(c => (
@@ -109,8 +112,8 @@ function TarjetaDebito({ tarjeta, onUpdate, onDelete }) {
             value={newNota} onChange={e => setNewNota(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && registrar()}
           />
-          <button className="btn-confirm" onClick={registrar} disabled={newMonto === ''}>✓</button>
-          <button className="btn-cancel" onClick={() => { setShowForm(false); setNewMonto(''); setNewNota(''); }}>✕</button>
+          <button className="btn-confirm" onClick={registrar} disabled={newMonto === ''}><Icono nombre="check" size={14} grosor={2.6} /></button>
+          <button className="btn-cancel" onClick={() => { setShowForm(false); setNewMonto(''); setNewNota(''); }}><Icono nombre="cerrar" size={14} grosor={2.4} /></button>
         </div>
       )}
 
@@ -183,8 +186,8 @@ function AgregarCargoForm({ onAdd }) {
         onChange={e => setMonto(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && confirmar()}
       />
-      <button className="btn-confirm" onClick={confirmar}>✓</button>
-      <button className="btn-cancel" onClick={() => { setShow(false); setConcepto(''); setMonto(''); }}>✕</button>
+      <button className="btn-confirm" onClick={confirmar}><Icono nombre="check" size={14} grosor={2.6} /></button>
+      <button className="btn-cancel" onClick={() => { setShow(false); setConcepto(''); setMonto(''); }}><Icono nombre="cerrar" size={14} grosor={2.4} /></button>
     </div>
   );
 }
@@ -296,10 +299,10 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
             <div className="fin-field">
               <label>¿Con qué la pagás?</label>
               <select className="cell-select" value={origen} onChange={e => setOrigen(e.target.value)}>
-                <option value="">💵 Efectivo / Transferencia</option>
+                <option value="">Efectivo / Transferencia</option>
                 {origenes.map(d => (
                   <option key={d.id} value={d.id}>
-                    🏧 {d.nombre} — saldo {montoT(saldoDebito(d))}
+                    {d.nombre} — saldo {montoT(saldoDebito(d))}
                   </option>
                 ))}
               </select>
@@ -386,7 +389,7 @@ function TarjetaCredito({ tarjeta, gastos, debitos = [], onUpdate, onPagar, onDe
                   <div key={p.id} className="tarj-desglose-row">
                     <span>{p.fecha}</span>
                     <span className="tarj-desglose-origen">
-                      {origenNombre ? `🏧 ${origenNombre}` : '💵 Efectivo / Transferencia'}
+                      {origenNombre || 'Efectivo / Transferencia'}
                     </span>
                     <span className="tarj-desglose-monto pos">−{montoT(p.monto)}</span>
                   </div>
@@ -454,7 +457,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
   return (
     <div className="tarj-seccion">
       <div className="tarj-seccion-title-row">
-        <span className="tarj-seccion-title">🧾 Compras en cuotas</span>
+        <span className="tarj-seccion-title"><Icono nombre="calendario" size={15} /> Compras en cuotas</span>
         <button className="add-row-btn" onClick={() => setShowForm(s => !s)}>
           <Plus size={14}/> Agregar compra
         </button>
@@ -538,7 +541,7 @@ function FinanciacionesSection({ financiaciones, onChange, anio, mes, tarjetas }
               <div key={f.id} className={`fin-row${activa ? '' : ' inactiva'}`}>
                 <div className="fin-row-info">
                   <span className="fin-row-concepto">{f.concepto}</span>
-                  <span className="fin-row-tarjeta">💳 {f.tarjetaNombre}</span>
+                  <span className="fin-row-tarjeta"><Icono nombre="tarjeta" size={12} /> {f.tarjetaNombre}</span>
                 </div>
                 <span className="fin-row-estado">
                   {n < 1
@@ -572,6 +575,7 @@ export default function Tarjetas({
   const [newNombre, setNewNombre] = useState('');
   const [newMoneda, setNewMoneda] = useState(monedaPrincipal);
   const [newTipo, setNewTipo] = useState('credito');
+  const esMovil = useEsMovil();
 
   const credito = data.filter(t => t.tipo !== 'debito');
   const debito  = data.filter(t => t.tipo === 'debito');
@@ -650,6 +654,31 @@ export default function Tarjetas({
     onChange(nuevas);
   };
 
+  if (esMovil) {
+    return (
+      <TarjetasMovil
+        data={data}
+        gastos={gastos}
+        financiaciones={financiaciones}
+        anio={anio}
+        mes={mes}
+        cuotasPendientes={cuotasPendientes}
+        onAplicarCuotas={onAplicarCuotas}
+        tarjetasPreviasLabel={tarjetasPreviasLabel}
+        onImportarTarjetasPrevias={onImportarTarjetasPrevias}
+        onAgregar={(nombre, tipo, moneda) => {
+          const base = { id: `tj_${Date.now().toString(36)}`, nombre, moneda, tipo };
+          onChange([...data, tipo === 'debito' ? { ...base, saldoInicial: 0, saldos: [] } : { ...base, monto: 0, pagado: false }]);
+        }}
+        onActualizar={actualizarCredito}
+        onEliminar={eliminar}
+        onPagarCredito={pagarCredito}
+        onDeshacerPagos={deshacerPagosCredito}
+        onChangeFinanciaciones={onChangeFinanciaciones}
+      />
+    );
+  }
+
   const totalUYUPend = credito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
   const totalUSDPend = credito.filter(t => esSecundaria(t.moneda)).reduce((s, t) => s + saldoTarjeta(t), 0);
   const totalUYUPag  = credito.filter(t => !esSecundaria(t.moneda)).reduce((s, t) => s + pagadoTarjeta(t), 0);
@@ -658,7 +687,7 @@ export default function Tarjetas({
   return (
     <div className="section-block">
       <div className="section-header-row">
-        <h2 className="section-title">💳 Tarjetas</h2>
+        <h2 className="section-title">Tarjetas</h2>
         <button className="add-row-btn" onClick={() => setShowAdd(s => !s)}>
           <Plus size={14}/> Agregar tarjeta
         </button>
@@ -714,15 +743,15 @@ export default function Tarjetas({
           <select className="cell-select" value={newMoneda} onChange={e => setNewMoneda(e.target.value)}>
                 <OpcionesMoneda />
           </select>
-          <button className="btn-confirm" onClick={agregar} disabled={!newNombre.trim()}>✓</button>
-          <button className="btn-cancel" onClick={() => { setShowAdd(false); setNewNombre(''); }}>✕</button>
+          <button className="btn-confirm" onClick={agregar} disabled={!newNombre.trim()}><Icono nombre="check" size={14} grosor={2.6} /></button>
+          <button className="btn-cancel" onClick={() => { setShowAdd(false); setNewNombre(''); }}><Icono nombre="cerrar" size={14} grosor={2.4} /></button>
         </div>
       )}
 
       {/* ── TARJETAS DEBITO ── */}
       {debito.length > 0 && (
         <div className="tarj-seccion">
-          <div className="tarj-seccion-title">🏧 Débito — saldo disponible</div>
+          <div className="tarj-seccion-title"><Icono nombre="debito" size={15} /> Débito — saldo disponible</div>
           {debito.map((t, i) => (
             <TarjetaDebito
               key={i}
@@ -737,7 +766,7 @@ export default function Tarjetas({
       {/* ── TARJETAS CREDITO ── */}
       {credito.length > 0 && (
         <div className="tarj-seccion">
-          <div className="tarj-seccion-title">💳 Crédito — deuda del mes</div>
+          <div className="tarj-seccion-title"><Icono nombre="tarjeta" size={15} /> Crédito — deuda del mes</div>
           {credito.map((t, i) => (
             <TarjetaCredito
               key={t.id || i}
@@ -789,7 +818,7 @@ export default function Tarjetas({
 
       {(totalUYUPend > 0 || totalUSDPend > 0) && (
         <div className="tarj-note">
-          💡 La deuda de cada tarjeta se arma con las cuotas del mes, los gastos que pagaste con ella y los cargos que agregues a mano. Usá <strong>Pagar</strong> para saldarla total o parcialmente.
+          La deuda de cada tarjeta se arma con las cuotas del mes, los gastos que pagaste con ella y los cargos que agregues a mano. Usá <strong>Pagar</strong> para saldarla total o parcialmente.
           {totalUSDPend > 0 && <> La deuda en {monedaSecundaria()} se muestra informativa.</>}
         </div>
       )}

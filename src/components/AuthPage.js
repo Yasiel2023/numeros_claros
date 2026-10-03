@@ -1,6 +1,7 @@
 // src/components/AuthPage.js
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import Icono from '../iconos';
 
 export default function AuthPage() {
   const { login, register, resetPassword, updateName } = useAuth();
@@ -41,15 +42,15 @@ export default function AuthPage() {
   return (
     <div className="auth-wrap">
       <div className="auth-panel-left">
-        <div className="auth-brand">🏠 <span>CasaFinanzas</span></div>
+        <div className="auth-brand"><span className="sb-icon">$</span> <span>Números Claros</span></div>
         <div className="auth-copy">
           <h1>Tu planilla familiar, ahora en la nube</h1>
           <p>Controlá ingresos, básicos, impuestos, compras semanales y ahorro — todo desde cualquier dispositivo.</p>
           <ul className="auth-features">
-            <li>📊 Dashboard de pagos pendientes</li>
-            <li>🛒 Compras semanales automáticas</li>
-            <li>💱 Pesos uruguayos y dólares</li>
-            <li>💾 Sincronizado con Firebase</li>
+            <li><Icono nombre="resumen" size={18} /> Todos tus pagos pendientes a la vista</li>
+            <li><Icono nombre="carrito" size={18} /> Compras del súper con modo carrito</li>
+            <li><Icono nombre="efectivo" size={18} /> Tu moneda y una segunda, como dólares</li>
+            <li><Icono nombre="casa" size={18} /> Compartido con tu familia</li>
           </ul>
         </div>
       </div>
@@ -89,8 +90,8 @@ export default function AuthPage() {
                 ¿Olvidaste tu contraseña?
               </button>
             )}
-            {error && <div className="af-error">⚠ {error}</div>}
-            {success && <div className="af-success">✓ {success}</div>}
+            {error && <div className="af-error">{error}</div>}
+            {success && <div className="af-success">{success}</div>}
             <button type="submit" className="af-submit" disabled={loading}>
               {loading ? 'Procesando...' : mode === 'login' ? 'Ingresar' : mode === 'register' ? 'Crear cuenta' : 'Enviar correo'}
             </button>

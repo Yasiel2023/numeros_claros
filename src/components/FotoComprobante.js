@@ -2,6 +2,7 @@
 import React, { useRef, useState } from 'react';
 import { Camera, Trash2, AlertCircle, Loader, Image as ImageIcon } from 'lucide-react';
 import { desglosarComprobante } from '../ia';
+import Icono from '../iconos';
 
 
 export default function FotoComprobante({ ia, onDesglose, loading: externalLoading }) {
@@ -95,13 +96,14 @@ export default function FotoComprobante({ ia, onDesglose, loading: externalLoadi
           <button className="btn-foto-option" onClick={() => camaraInputRef.current?.click()}>
             <Camera size={24} />
             <span>Sacar foto</span>
+            <span className="foto-sub">Con buena luz y el ticket entero</span>
           </button>
           <button className="btn-foto-option" onClick={() => galeriaInputRef.current?.click()}>
             <ImageIcon size={24} />
             <span>Elegir de la galería</span>
           </button>
           <button className="btn-foto-option" onClick={pegarDesdePortapapeles}>
-            <span className="text-2xl">📋</span>
+            <Icono nombre="documento" size={24} />
             <span>Pegar desde portapapeles</span>
           </button>
         </div>
@@ -120,7 +122,7 @@ export default function FotoComprobante({ ia, onDesglose, loading: externalLoadi
                   <Loader size={16} className="spin" /> Analizando...
                 </>
               ) : (
-                <>✨ Desglosar con IA</>
+                <>Leer el ticket con IA</>
               )}
             </button>
             <button

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, Check, Power } from 'lucide-react';
 import { db } from '../firebase';
 import { ref, get, update } from 'firebase/database';
+import Icono from '../iconos';
 
 const URL_DEFAULT = 'https://api.groq.com/openai/v1';
 const MODELO_DEFAULT = 'openai/gpt-oss-120b';
@@ -69,13 +70,13 @@ export default function Config({ onGuardado }) {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">⚙️ Configuración</h1>
+          <h1 className="page-title"><Icono nombre="ajustes" size={22} className="page-title-ico" /> Configuración</h1>
           <p className="page-sub">Configuración del sistema · solo administradores</p>
         </div>
       </div>
 
       <div className="section-block">
-        <h2 className="section-title">🤖 Inteligencia artificial</h2>
+        <h2 className="section-title">Inteligencia artificial</h2>
         <p className="section-desc">
           La IA la usan <strong>todos los usuarios</strong> (comprobantes, Preguntas IA y armar presupuestos).
           Las consultas pasan por un servidor propio (Cloudflare Worker) que verifica la sesión, limita el uso
@@ -89,7 +90,7 @@ export default function Config({ onGuardado }) {
         )}
 
         <div className={`alert alert-${activa ? 'info' : 'warning'}`}>
-          {activa ? '✓ La IA está activa para todos los usuarios.' : 'La IA está desactivada: nadie puede usarla.'}
+          {activa ? 'La IA está activa para todos los usuarios.' : 'La IA está desactivada: nadie puede usarla.'}
         </div>
 
         <div className="config-form">
@@ -121,7 +122,7 @@ export default function Config({ onGuardado }) {
 
           <div className="config-actions">
             <button className="btn-primary" onClick={() => guardar()}>
-              {saved ? <><Check size={16} /> Guardado</> : '💾 Guardar'}
+              {saved ? <><Check size={16} /> Guardado</> : 'Guardar'}
             </button>
             <button className="btn-secondary" onClick={() => guardar({ activa: !activa })}>
               <Power size={16} /> {activa ? 'Desactivar IA' : 'Activar IA'}

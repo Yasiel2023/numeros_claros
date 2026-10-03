@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { money, moneyDe, monedaPrincipal, monedaSecundaria } from '../moneda';
 import { Plus, Trash2, PiggyBank, DollarSign, RefreshCw, ArrowRightLeft } from 'lucide-react';
+import Icono from '../iconos';
 
 const fmtDate = (iso) => {
   if (!iso) return '';
@@ -202,7 +203,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM DEPÓSITO UYU ── */}
       {activeForm === 'depuyu' && (
         <div className="caja-form">
-          <h3 className="caja-form-title">🐷 Depositar ahorro en {P}</h3>
+          <h3 className="caja-form-title"><Icono nombre="ahorro" size={18} /> Depositar ahorro en {P}</h3>
           <div className="caja-form-grid">
             <div className="caja-form-field">
               <label>Monto {P}</label>
@@ -232,7 +233,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM TRANSFERENCIA USD ── */}
       {activeForm === 'transf' && (
         <div className="caja-form">
-          <h3 className="caja-form-title">💸 Convertir {P} → {S}</h3>
+          <h3 className="caja-form-title"><Icono nombre="efectivo" size={18} /> Convertir {P} → {S}</h3>
           <div className="caja-form-grid">
             <div className="caja-form-field">
               <label>Monto {P}</label>
@@ -279,7 +280,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM AJUSTE UYU ── */}
       {activeForm === 'ajuste_uyu' && (
         <div className="caja-form caja-form-ajuste">
-          <h3 className="caja-form-title">✏️ Ajuste manual saldo {P}</h3>
+          <h3 className="caja-form-title"><Icono nombre="ajustes" size={18} /> Ajuste manual saldo {P}</h3>
           <p className="caja-form-hint">Saldo actual: <strong>{money(saldoUYUFinal)}</strong></p>
           <div className="caja-form-grid">
             <div className="caja-form-field">
@@ -305,7 +306,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       {/* ── FORM AJUSTE USD ── */}
       {activeForm === 'ajuste_usd' && (
         <div className="caja-form caja-form-ajuste">
-          <h3 className="caja-form-title">✏️ Ajuste manual saldo {S}</h3>
+          <h3 className="caja-form-title"><Icono nombre="ajustes" size={18} /> Ajuste manual saldo {S}</h3>
           <p className="caja-form-hint">Saldo actual: <strong>{fmtUSD(saldoUSDFinal)}</strong></p>
           <div className="caja-form-grid">
             <div className="caja-form-field">
@@ -329,7 +330,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
       )}
 
       {/* ── HISTORIAL ── */}
-      <h3 className="sub-title mt16">📋 Historial de movimientos</h3>
+      <h3 className="sub-title mt16">Movimientos</h3>
       {movs.length === 0 ? (
         <p className="empty-txt">Sin movimientos aún. Depositá tu primer ahorro.</p>
       ) : (

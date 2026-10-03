@@ -18,20 +18,19 @@ const camposForFrecuencia = () => [
 const multFrecuencia = (f) =>
   f === 'quincenal' ? 2 : f === 'cada10dias' ? 3 : f === 'semanal' ? 4 : 1;
 
-const ICONOS_GRUPO = ['🏠','🧾','🛒','🧴','🎉','💡','🚗','🎓','🏥','🐾','🍽️','🎮','💪','📦'];
 
 // Formulario para agregar un nuevo grupo a una plantilla
 function NuevoGrupoForm({ onAdd }) {
   const [show, setShow]           = useState(false);
   const [nombre, setNombre]       = useState('');
-  const [icono, setIcono]         = useState('📦');
+  const [icono, setIcono]         = useState('');
   const [frecuencia, setFrecuencia] = useState('mensual');
 
   const add = () => {
     if (!nombre.trim()) return;
     const id = nombre.toLowerCase().replace(/[^a-z0-9]/g, '_').slice(0, 20) + '_' + Date.now().toString(36).slice(-4);
     onAdd({ id, nombre: nombre.trim(), icono, frecuencia, items: [] });
-    setNombre(''); setIcono('📦'); setFrecuencia('mensual'); setShow(false);
+    setNombre(''); setIcono(''); setFrecuencia('mensual'); setShow(false);
   };
 
   if (!show) return (
@@ -44,8 +43,7 @@ function NuevoGrupoForm({ onAdd }) {
     <div className="dm-nuevo-grupo-form">
       <input value={nombre} onChange={e => setNombre(e.target.value)}
         placeholder="Nombre del grupo" className="dm-input" autoFocus />
-      <input value={icono} onChange={e => setIcono(e.target.value)}
-        placeholder="📦" className="dm-input" style={{ width: 48 }} />
+      <SelectorIconoCategoria valor={icono} onChange={setIcono} />
       <select value={frecuencia} onChange={e => setFrecuencia(e.target.value)} className="dm-input dm-select">
         {FRECUENCIAS_GRUPO.map(f => (
           <option key={f.value} value={f.value}>{f.label} — {f.desc}</option>
@@ -282,7 +280,7 @@ function PlantillaPanel({ dbPath }) {
             return (
               <div key={grupo.id || gIdx} className="dm-grupo-section">
                 <div className="dm-grupo-header">
-                  <span>{grupo.icono} {grupo.nombre}</span>
+                  <span><IconoCategoria grupo={grupo} size={26} /> {grupo.nombre}</span>
                   <span className="dm-grupo-tipo">{frecLabel}</span>
                   <button className="dm-del-row" style={{ marginLeft: 'auto' }}
                     onClick={() => setField('grupos_gastos', toArray(editing.grupos_gastos).filter((_, i) => i !== gIdx))}
@@ -685,7 +683,7 @@ function UserTemplatesManager({ dbPath }) {
                   <button className={`utm-acc-header ${isOpen ? 'open' : ''}`} onClick={() => setSeccionAbierta(isOpen ? null : secKey)}>
                     <div className="utm-acc-left">
                       <ChevronRight size={14} className={`utm-acc-chevron ${isOpen ? 'rotated' : ''}`} />
-                      <span className="utm-acc-label">{grupo.icono} {grupo.nombre}</span>
+                      <span className="utm-acc-label"><IconoCategoria grupo={grupo} size={26} /> {grupo.nombre}</span>
                       <span className="utm-acc-count">{items.length} items</span>
                       <span className="dm-grupo-tipo">{frecLabel}</span>
                     </div>

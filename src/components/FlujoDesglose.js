@@ -31,7 +31,7 @@ export default function FlujoDesglose({
       <div className="modal-content flujo-desglose-modal">
         <div className="modal-header">
           <h2>
-            {paso === 'foto' ? '📸 Capturar comprobante' : '✓ Revisar desglose'}
+            {paso === 'foto' ? 'Cargar comprobante' : 'Revisar ticket'}
           </h2>
           <button className="modal-close" onClick={onClose}>
             <X size={20} />

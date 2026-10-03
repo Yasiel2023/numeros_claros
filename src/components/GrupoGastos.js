@@ -7,6 +7,9 @@ import React, { useState, useEffect } from 'react';
 import { money, esSecundaria, simbolo } from '../moneda';
 import { Plus, Trash2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { getPeriodosLabel } from '../constants';
+import useEsMovil from '../useEsMovil';
+import GrupoGastosMovil from './GrupoGastosMovil';
+import Icono, { IconoCategoria } from '../iconos';
 
 const fmtFechaHora = () => {
   const d = new Date();
@@ -163,10 +166,10 @@ function ItemRow({ item, tarjetas, modoCarrito, onChange, onDelete, onPagar, onD
       <tr className={pagado ? 'row-pagado' : enCarrito ? 'row-carrito' : ''}>
         <td>
           <span className="item-nombre">{item.nombre}</span>
-          {enCarrito && <span className="item-carrito-tag">🛒 en carrito</span>}
+          {enCarrito && <span className="item-carrito-tag"><Icono nombre="carrito" size={12} grosor={2.4} /> en carrito</span>}
           {pagado && tarjetaUsada && (
             <span className="item-tarjeta-tag">
-              {tarjetaUsada.tipo === 'debito' ? '🏧' : '💳'} {tarjetaUsada.nombre}
+              <Icono nombre={tarjetaUsada.tipo === 'debito' ? 'debito' : 'tarjeta'} size={12} grosor={2.4} /> {tarjetaUsada.nombre}
             </span>
           )}
         </td>
@@ -214,12 +217,12 @@ function ItemRow({ item, tarjetas, modoCarrito, onChange, onDelete, onPagar, onD
                 onChange={e => setSeleccion(e.target.value)}
                 autoFocus
               >
-                <option value="">💵 Efectivo / Transferencia</option>
+                <option value="">Efectivo / Transferencia</option>
                 {opciones.map(t => (
                   <option key={t.id} value={t.id}>
                     {t.tipo === 'debito'
-                      ? `🏧 ${t.nombre} — saldo ${money(saldoActualDebito(t))}`
-                      : `💳 ${t.nombre} — crédito`}
+                      ? `${t.nombre} — saldo ${money(saldoActualDebito(t))}`
+                      : `${t.nombre} — crédito`}
                   </option>
                 ))}
               </select>
@@ -276,7 +279,7 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
           <span className="periodo-header-dot" />
           <span className="periodo-label">{periodo.label}</span>
           <span className="periodo-stats">
-            {modoCarrito && pendientes.length > 0 && <>🛒 {enCarrito}/{pendientes.length} &middot; </>}
+            {modoCarrito && pendientes.length > 0 && <>carrito {enCarrito}/{pendientes.length} &middot; </>}
             {pagados}/{conPrev} pagados &middot; prev {money(totalPrev)} &middot; pend {money(totalPend)} &middot; pagado {money(totalPagado)}
           </span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -385,8 +388,9 @@ function PeriodoSection({ periodo, showHeader, onChange, isCurrentPeriod = true,
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [] }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [], onVolver, onCargarComprobante }) {
   const [mostrarPagados, setMostrarPagados] = useState(true);
+  const esMovil = useEsMovil();
 
   // Modo carrito: preferencia de este navegador, recordada por categoría
   const claveCarrito = `modoCarrito_${grupo?.id}`;
@@ -416,10 +420,13 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
 
   // Marcar pagado. Si se eligio tarjeta, el gasto y la tarjeta se actualizan
   // juntos para que el guardado quede consistente.
-  const pagarItem = (periodoIdx, itemIdx, tarjetaId) => {
+  // montoPagado: el monto confirmado en el panel de pago del celular (si no, el del item)
+  const pagarItem = (periodoIdx, itemIdx, tarjetaId, montoPagado) => {
     const item  = (periodos[periodoIdx]?.items || [])[itemIdx];
     if (!item) return;
-    const monto = item.real !== undefined ? (item.real || 0) : (item.previsto || 0);
+    const monto = montoPagado !== undefined
+      ? montoPagado
+      : (item.real !== undefined ? (item.real || 0) : (item.previsto || 0));
 
     let nuevasTarjetas = null;
     // Al pagarse sale del carrito
@@ -507,12 +514,35 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
       items: (p.items || []).map(({ enCarrito: _ec, ...resto }) => resto),
     })));
 
+  if (esMovil) {
+    const actual = periodos.findIndex(p => grupo?.frecuencia === 'semanal' && esPeriodoActual(p, 'semanal', anio, mes));
+    return (
+      <GrupoGastosMovil
+        grupo={grupo}
+        periodos={periodos}
+        periodoInicial={actual >= 0 ? actual : 0}
+        anio={anio}
+        mes={mes}
+        tarjetas={tarjetas}
+        modoCarrito={modoCarrito}
+        setModoCarrito={setModoCarrito}
+        vaciarCarrito={vaciarCarrito}
+        onUpdatePeriodo={updatePeriodo}
+        onPagar={pagarItem}
+        onDespagar={despagarItem}
+        onEliminar={eliminarItem}
+        onVolver={onVolver}
+        onCargarComprobante={onCargarComprobante}
+      />
+    );
+  }
+
   return (
     <div className="section-block">
       {/* Cabecera del grupo */}
       <div className="section-header">
         <h2 className="section-title">
-          {grupo?.icono} {grupo?.nombre}
+          <IconoCategoria grupo={grupo} size={30} /> {grupo?.nombre}
           {grupo?.frecuencia && grupo.frecuencia !== 'mensual' && (
             <span className="grupo-freq-badge">{grupo.frecuencia}</span>
           )}
@@ -528,7 +558,7 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
               checked={modoCarrito}
               onChange={(e) => setModoCarrito(e.target.checked)}
             />
-            <span>🛒</span>
+            <Icono nombre="carrito" size={16} />
           </label>
           <label className="checkbox-filter">
             <input
@@ -562,7 +592,7 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
       {modoCarrito && (
         <div className="carrito-summary">
           <div className="carrito-summary-item">
-            <span>🛒 En el carrito</span>
+            <span>En el carrito</span>
             <strong>{enCarrito.length} · {money(enCarrito.reduce((s, i) => s + montoPend(i), 0))}</strong>
           </div>
           <div className="carrito-summary-item falta">

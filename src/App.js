@@ -1,4 +1,4 @@
-﻿// src/App.js
+// src/App.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { ref, get, set, remove, update } from 'firebase/database';
@@ -15,7 +15,10 @@ import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
 import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
 import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financiaciones';
-import { LayoutDashboard, TrendingUp, Home, Receipt, ShoppingCart, Droplets, BarChart2, LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, Settings, UserPlus, Bell, CreditCard, Smile, PiggyBank, Menu, Camera } from 'lucide-react';
+import { LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, UserPlus, Menu } from 'lucide-react';
+import GastosLista from './components/GastosLista';
+import MasMovil from './components/MasMovil';
+import Icono, { estiloCategoria, IconoCategoria } from './iconos';
 import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
 import InvitacionesBanner from './components/InvitacionesBanner';
@@ -31,6 +34,7 @@ import { genId } from './components/OnboardingWizard';
 import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS } from './moneda';
 import Chat from './components/Chat';
 import './App.css';
+import './movil.css';
 
 // Dibuja los modales directamente en <body>. Si se renderizan dentro del sidebar,
 // en el celular su transform los posiciona relativos al menú y no a la pantalla.
@@ -127,23 +131,22 @@ const NOMBRES_VISIBLES = { compras: 'Supermercado' };
 const nombreVisibleGrupo = (nombre) =>
   NOMBRES_VISIBLES[(nombre || '').trim().toLowerCase()] || nombre;
 
-// Iconos para el NAV dinámico de grupos
-const GRUPO_ID_ICON        = { basicos: Home, impuestos: Receipt, compras: ShoppingCart, supermercado: ShoppingCart, asceo: Droplets, ocio: Smile };
-const GRUPO_FRECUENCIA_ICON = { mensual: Home, quincenal: Receipt, cada10dias: BarChart2, semanal: ShoppingCart };
-
 const NAV_FIJOS_INICIO = [
-  { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, emoji: '📋' },
-  { key: 'ingresos',  label: 'Ingresos',  icon: TrendingUp,      emoji: '💼' },
+  { key: 'dashboard', label: 'Inicio',    icono: 'casa' },
+  { key: 'ingresos',  label: 'Ingresos',  icono: 'ingresos' },
 ];
 const NAV_FIJOS_FIN = [
-  { key: 'tarjetas',   label: 'Tarjetas',        icon: CreditCard, emoji: '💳' },
-  { key: 'comprobantes', label: 'Comprobantes',  icon: Receipt,    emoji: '🧾' },
-  { key: 'resumen',    label: 'Resumen',          icon: BarChart2,  emoji: '📊' },
-  { key: 'caja',       label: 'Caja de Ahorro',  icon: PiggyBank,  emoji: '🐷' },
-  { key: 'chat',       label: 'Preguntas IA',    icon: BarChart2,  emoji: '💬' },
-  { key: 'plantillas', label: 'Plantillas',       icon: Settings,   emoji: '⚙️' },
-  { key: 'config',     label: 'Configuración',    icon: Settings,   emoji: '⚙️' },
+  { key: 'tarjetas',   label: 'Tarjetas',        icono: 'tarjeta' },
+  { key: 'comprobantes', label: 'Comprobantes',  icono: 'recibo' },
+  { key: 'resumen',    label: 'Resumen',          icono: 'resumen' },
+  { key: 'caja',       label: 'Caja de ahorro',  icono: 'ahorro' },
+  { key: 'chat',       label: 'Preguntas IA',    icono: 'chat' },
+  { key: 'plantillas', label: 'Plantillas',       icono: 'documento' },
+  { key: 'config',     label: 'Configuración',    icono: 'ajustes' },
 ];
+
+// En el celular estas secciones se abren desde la pestaña "Más"
+const VISTAS_DE_MAS = ['ingresos', 'comprobantes', 'resumen', 'caja', 'chat', 'plantillas', 'config'];
 
 // ── App interna (usuario autenticado) ─────────────────────────
 function AppInterna() {
@@ -215,12 +218,11 @@ function AppInterna() {
     ...grupos.map(g => ({
       key:     `grupo_${g.id}`,
       label:   g.nombre,
-      icon:    GRUPO_ID_ICON[g.id] || GRUPO_FRECUENCIA_ICON[g.frecuencia || (g.tipo === 'semanas' ? 'semanal' : 'mensual')] || Home,
-      emoji:   g.icono || null,
+      icono:   estiloCategoria(g).icono,
       grupoId: g.id,
     })),
     // Acción (no vista): agregar una categoría a mitad de mes
-    { key: '__nueva_categoria', label: 'Nueva categoría', emoji: '➕', accion: true },
+    { key: '__nueva_categoria', label: 'Nueva categoría', icono: 'mas', accion: true },
     // Configuración (clave de IA del sistema) solo para admins
     ...NAV_FIJOS_FIN.filter(n => n.key !== 'config' || admins?.[user?.uid] === true),
   ];
@@ -838,6 +840,33 @@ function AppInterna() {
     return <OnboardingWizard onCreate={handleOnboardingCreate} ia={{ apiKey: groqApiKey, url: groqUrl }} />;
   }
 
+  // Se muestra en el menú lateral (computadora) y en la pestaña Más (celular)
+  const invitacionesBanner = invitaciones.length > 0 && (
+    <InvitacionesBanner
+      invitaciones={invitaciones}
+      onAceptar={async (inv) => {
+        await set(ref(db, `accesos/${user.uid}/${inv.id}`), {
+          ownerUid: inv.ownerUid,
+          nombre: inv.presupuestoNombre,
+          rol: 'miembro',
+          invitadoPor: inv.ownerEmail,
+        });
+        await set(ref(db, `invitaciones/${user.uid}/${inv.id}/estado`), 'aceptada');
+        setInvitaciones(prev => prev.filter(i => i.id !== inv.id));
+        setPresupuestos(prev => [...prev, {
+          id: inv.id,
+          nombre: inv.presupuestoNombre,
+          ownerUid: inv.ownerUid,
+          rol: 'miembro',
+        }]);
+      }}
+      onRechazar={async (inv) => {
+        await set(ref(db, `invitaciones/${user.uid}/${inv.id}/estado`), 'rechazada');
+        setInvitaciones(prev => prev.filter(i => i.id !== inv.id));
+      }}
+    />
+  );
+
   return (
     <div className="layout">
       {/* OVERLAY MOBILE */}
@@ -846,7 +875,7 @@ function AppInterna() {
       {/* SIDEBAR */}
       <aside className={`sidebar${sidebarOpen ? ' sidebar--open' : ''}`}>
         <div className="sidebar-brand">
-          <span className="sb-icon">🏠</span>
+          <span className="sb-icon">$</span>
           <span className="sb-name">Números Claros</span>
           {/* En el celular el menú ocupa toda la pantalla: botón para cerrarlo */}
           <button className="sidebar-close-btn" onClick={closeSidebar} aria-label="Cerrar menú">
@@ -913,7 +942,7 @@ function AppInterna() {
           <div className="presup-modal-overlay" onClick={() => !guardandoMoneda && setShowMonedaModal(false)}>
             <div className="presup-modal" onClick={e => e.stopPropagation()}>
               <div className="presup-modal-header">
-                <span>💱 Moneda del presupuesto</span>
+                <span>Moneda del presupuesto</span>
                 <button className="presup-modal-close" onClick={() => setShowMonedaModal(false)} disabled={guardandoMoneda}>
                   <X size={14} />
                 </button>
@@ -925,7 +954,7 @@ function AppInterna() {
                 disabled={guardandoMoneda}
               />
               <p className="presup-moneda-aviso">
-                ⚠️ Los montos <strong>no se convierten</strong>: solo cambia la moneda con la que se muestran.
+                Los montos <strong>no se convierten</strong>: solo cambia la moneda con la que se muestran.
                 Las tarjetas y cuotas guardadas en la moneda anterior pasan a la nueva.
               </p>
               <div className="presup-modal-actions">
@@ -940,31 +969,7 @@ function AppInterna() {
         )}
 
         {/* Banner de invitaciones pendientes */}
-        {invitaciones.length > 0 && (
-          <InvitacionesBanner
-            invitaciones={invitaciones}
-            onAceptar={async (inv) => {
-              await set(ref(db, `accesos/${user.uid}/${inv.id}`), {
-                ownerUid: inv.ownerUid,
-                nombre: inv.presupuestoNombre,
-                rol: 'miembro',
-                invitadoPor: inv.ownerEmail,
-              });
-              await set(ref(db, `invitaciones/${user.uid}/${inv.id}/estado`), 'aceptada');
-              setInvitaciones(prev => prev.filter(i => i.id !== inv.id));
-              setPresupuestos(prev => [...prev, {
-                id: inv.id,
-                nombre: inv.presupuestoNombre,
-                ownerUid: inv.ownerUid,
-                rol: 'miembro',
-              }]);
-            }}
-            onRechazar={async (inv) => {
-              await set(ref(db, `invitaciones/${user.uid}/${inv.id}/estado`), 'rechazada');
-              setInvitaciones(prev => prev.filter(i => i.id !== inv.id));
-            }}
-          />
-        )}
+        {invitacionesBanner}
 
         {/* Modal compartir presupuesto */}
         {showCompartirModal && presupuestoActual && (
@@ -1047,12 +1052,12 @@ function AppInterna() {
             disabled={!mesData || loading || nuevoMesPendiente}
             title="Cargar los gastos de un comprobante con IA"
           >
-            <Camera size={16}/> <span>Cargar comprobante</span>
+            <Icono nombre="camara" size={18}/> <span>Cargar comprobante</span>
           </button>
         )}
 
         <nav className="sidebar-nav">
-          {NAV.map(({ key, label, icon: Icon, emoji, accion }) => (
+          {NAV.map(({ key, label, icono, accion }) => (
             <button key={key} className={`nav-item ${accion ? 'nav-item-nueva' : ''} ${vista === key ? 'active' : ''}`}
               disabled={accion && !defaults}
               onClick={() => {
@@ -1060,9 +1065,8 @@ function AppInterna() {
                 else setVista(key);
                 closeSidebar();
               }}>
-              {emoji
-                ? <span className="nav-emoji">{emoji}</span>
-                : <Icon size={16}/>}
+              <Icono nombre={icono} size={18} />
+
               <span>{label}</span>
               {key === 'dashboard' && pendTotal > 0 && (
                 <span className="nav-badge">{pendTotal}</span>
@@ -1095,13 +1099,34 @@ function AppInterna() {
                 ? 'Plantillas de datos'
                 : vista === 'caja'
                 ? 'Caja de Ahorro'
-                : `${NAV.find(n => n.key === vista)?.label} — ${MESES_ES[mes]} ${año}`
+                : `${NAV.find(n => n.key === vista)?.label || 'Gastos'} — ${MESES_ES[mes]} ${año}`
               }
+            </h2>
+            {/* Celular: título corto, el mes va a la derecha */}
+            {VISTAS_DE_MAS.includes(vista) && (
+              <button className="topbar-volver" onClick={() => setVista('mas')} aria-label="Volver a Más">
+                <ChevronLeft size={22}/>
+              </button>
+            )}
+            <h2 className="topbar-title-movil">
+              {vista === 'dashboard' ? `Hola, ${nombre}`
+                : vista === 'gastos' ? 'Gastos'
+                : vista === 'mas' ? 'Más'
+                : vista === 'plantillas' ? 'Plantillas'
+                : vista === 'caja' ? 'Caja de ahorro'
+                : NAV.find(n => n.key === vista)?.label}
             </h2>
           </div>
           <div className="topbar-right">
-            {saving && <span className="save-status saving"><Loader size={14} className="spin"/> Guardando...</span>}
-            {saved && !saving && <span className="save-status saved"><Save size={14}/> Guardado</span>}
+            {saving && <span className="save-status saving"><Loader size={14} className="spin"/> <span className="save-txt">Guardando...</span></span>}
+            {saved && !saving && <span className="save-status saved"><Save size={14}/> <span className="save-txt">Guardado</span></span>}
+            {vista !== 'plantillas' && vista !== 'caja' && vista !== 'mas' && (
+              <div className="topbar-mes">
+                <button onClick={mesAnterior} aria-label="Mes anterior"><ChevronLeft size={16}/></button>
+                <span>{MESES_ES[mes].slice(0, 3)} {String(año).slice(2)}</span>
+                <button onClick={mesSiguiente} aria-label="Mes siguiente"><ChevronRight size={16}/></button>
+              </div>
+            )}
           </div>
         </header>
 
@@ -1110,7 +1135,7 @@ function AppInterna() {
           <div className="presup-modal-overlay" onClick={() => setShowGuardarTplModal(false)}>
             <div className="presup-modal" onClick={e => e.stopPropagation()}>
               <div className="presup-modal-header">
-                <span>💾 Guardar mes como plantilla</span>
+                <span>Guardar mes como plantilla</span>
                 <button className="presup-modal-close" onClick={() => setShowGuardarTplModal(false)}><X size={14} /></button>
               </div>
               <p className="gtpl-desc">
@@ -1133,7 +1158,7 @@ function AppInterna() {
                   onClick={guardarMesComoPlantilla}
                   disabled={!nombreTplNueva.trim() || guardandoTpl || tplGuardada}
                 >
-                  {guardandoTpl ? <Loader size={13} className="spin" /> : tplGuardada ? '✓ Guardada' : 'Guardar'}
+                  {guardandoTpl ? <Loader size={13} className="spin" /> : tplGuardada ? 'Guardada' : 'Guardar'}
                 </button>
               </div>
             </div>
@@ -1164,12 +1189,34 @@ function AppInterna() {
         )}
 
         {/* Contenido */}
-        <main className="main-content">
-          {vista === 'plantillas' ? (
+        <main className={`main-content vista-${vista.startsWith('grupo_') ? 'grupo' : vista}`}>
+          {vista === 'mas' ? (
+            <MasMovil
+              nombre={nombre}
+              initiales={initiales}
+              presupuestos={presupuestos}
+              presupuestoActual={presupuestoActual}
+              onCambiarPresupuesto={setPresupuestoActual}
+              monedasTxt={`${monedasActivas.principal}${monedasActivas.secundaria ? ' · ' + monedasActivas.secundaria : ''}`}
+              esDueño={rolActual === 'owner'}
+              esAdmin={esAdmin}
+              puedeNuevaCategoria={!!defaults}
+              invitaciones={invitacionesBanner}
+              onIr={setVista}
+              onNuevaCategoria={() => setShowNuevaCategoria(true)}
+              onCompartir={() => setShowCompartirModal(true)}
+              onMoneda={() => {
+                setMonedaEdit({ moneda: monedasActivas.principal, moneda2: monedasActivas.secundaria });
+                setShowMonedaModal(true);
+              }}
+              onNuevoPresupuesto={() => { setNuevoNombre(''); setShowNuevoModal(true); }}
+              onLogout={logout}
+            />
+          ) : vista === 'plantillas' ? (
             <DefaultsManager esAdmin={esAdmin} />
           ) : vista === 'caja' ? (
             <div className="page">
-              <div className="page-header"><h1 className="page-title">🐷 Caja de Ahorro</h1></div>
+              <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="ahorro" size={22} className="page-title-ico" /> Caja de ahorro</h1></div>
               <CajaAhorro
                 cajaData={cajaData}
                 onChange={updateCajaData}
@@ -1184,6 +1231,7 @@ function AppInterna() {
               {vista === 'dashboard' && (
                 <Dashboard
                   mesData={mesData} mes={mes} año={año} grupos={grupos}
+                  onTicket={groqApiKey ? () => setShowFotoModal(true) : null}
                   onIrA={key =>
                     // Compatibilidad con claves legacy
                     setVista(['basicos','impuestos','asceo','ocio','semanas'].includes(key)
@@ -1194,7 +1242,7 @@ function AppInterna() {
               )}
               {vista === 'ingresos' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">💼 Ingresos — {MESES_ES[mes]} {año}</h1></div>
+                  <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="ingresos" size={22} className="page-title-ico" /> Ingresos — {MESES_ES[mes]} {año}</h1></div>
                   <Ingresos
                     data={mesData?.ingresos}
                     onChange={ing => updateMesData({ ...mesData, ingresos: ing })}
@@ -1209,8 +1257,8 @@ function AppInterna() {
                 if (!grupo) return null;
                 return (
                   <div className="page">
-                    <div className="page-header">
-                      <h1 className="page-title">{grupo.icono} {grupo.nombre} — {MESES_ES[mes]} {año}</h1>
+                    <div className="page-header page-header--escritorio">
+                      <h1 className="page-title"><IconoCategoria grupo={grupo} size={30} /> {grupo.nombre} — {MESES_ES[mes]} {año}</h1>
                     </div>
                     <GrupoGastos
                       grupo={grupo}
@@ -1225,6 +1273,8 @@ function AppInterna() {
                       }
                       anio={año}
                       mes={mes}
+                      onVolver={() => setVista('gastos')}
+                      onCargarComprobante={groqApiKey ? () => setShowFotoModal(true) : null}
                     />
                   </div>
                 );
@@ -1232,7 +1282,7 @@ function AppInterna() {
 
               {vista === 'tarjetas' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">💳 Tarjetas — {MESES_ES[mes]} {año}</h1></div>
+                  <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="tarjeta" size={22} className="page-title-ico" /> Tarjetas — {MESES_ES[mes]} {año}</h1></div>
                   <Tarjetas
                     data={mesData?.tarjetas}
                     gastos={mesData?.gastos}
@@ -1250,7 +1300,7 @@ function AppInterna() {
               )}
               {vista === 'comprobantes' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">🧾 Comprobantes — {MESES_ES[mes]} {año}</h1></div>
+                  <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="recibo" size={22} className="page-title-ico" /> Comprobantes — {MESES_ES[mes]} {año}</h1></div>
                   <Comprobantes
                     data={mesData?.comprobantes || []}
                     grupos={grupos}
@@ -1263,15 +1313,15 @@ function AppInterna() {
               )}
               {vista === 'resumen' && (
                 <div className="page">
-                  <div className="page-header">
-                    <h1 className="page-title">📊 Resumen — {MESES_ES[mes]} {año}</h1>
+                  <div className="page-header page-header--escritorio">
+                    <h1 className="page-title"><Icono nombre="resumen" size={22} className="page-title-ico" /> Resumen — {MESES_ES[mes]} {año}</h1>
                     {mesData && (
                       <button
                         className="btn-save-tpl"
                         onClick={() => { setNombreTplNueva(`${MESES_ES[mes]} ${año}`); setShowGuardarTplModal(true); }}
                         title="Guardar valores presupuestados de este mes como plantilla"
                       >
-                        💾 Guardar como plantilla
+                        Guardar como plantilla
                       </button>
                     )}
                   </div>
@@ -1280,7 +1330,7 @@ function AppInterna() {
               )}
               {vista === 'chat' && (
                 <div className="page">
-                  <div className="page-header"><h1 className="page-title">💬 Preguntas sobre tu presupuesto</h1></div>
+                  <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="chat" size={22} className="page-title-ico" /> Preguntas sobre tu presupuesto</h1></div>
                   <div className="section-block">
                     <Chat
                       apiKey={groqApiKey}
@@ -1301,9 +1351,41 @@ function AppInterna() {
               {vista === 'config' && esAdmin && (
                 <Config onGuardado={cargarGroqConfig} />
               )}
+              {vista === 'gastos' && (
+                <GastosLista
+                  mesData={mesData}
+                  grupos={grupos}
+                  onAbrir={id => setVista(`grupo_${id}`)}
+                  onNuevaCategoria={defaults ? () => setShowNuevaCategoria(true) : null}
+                />
+              )}
             </>
           )}
         </main>
+
+        {/* Barra de pestañas (solo celular, ver App.css) */}
+        <nav className="tabbar" aria-label="Secciones principales">
+          <button className={`tab ${vista === 'dashboard' ? 'active' : ''}`} onClick={() => setVista('dashboard')}>
+            <Icono nombre="casa" size={24}/><span>Inicio</span>
+          </button>
+          <button className={`tab ${vista === 'gastos' || vista.startsWith('grupo_') ? 'active' : ''}`} onClick={() => setVista('gastos')}>
+            <Icono nombre="gastos" size={24}/><span>Gastos</span>
+            {pendTotal > 0 && <span className="tab-badge">{pendTotal > 99 ? '99+' : pendTotal}</span>}
+          </button>
+          {groqApiKey ? (
+            <button className="tab-fab" onClick={() => setShowFotoModal(true)}
+              disabled={!mesData || loading || nuevoMesPendiente} aria-label="Cargar comprobante">
+              <Icono nombre="camara" size={26} grosor={2.2}/>
+            </button>
+          ) : <span className="tab-fab-hueco" />}
+          <button className={`tab ${vista === 'tarjetas' ? 'active' : ''}`} onClick={() => setVista('tarjetas')}>
+            <Icono nombre="tarjeta" size={24}/><span>Tarjetas</span>
+          </button>
+          <button className={`tab ${vista === 'mas' || VISTAS_DE_MAS.includes(vista) ? 'active' : ''}`}
+            onClick={() => setVista('mas')}>
+            <Icono nombre="puntos" size={24}/><span>Más</span>
+          </button>
+        </nav>
       </div>
     </div>
   );

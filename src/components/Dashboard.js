@@ -1,12 +1,39 @@
 // src/components/Dashboard.js
 import React from 'react';
 import { money, moneyDe, esSecundaria, monedaSecundaria } from '../moneda';
-import { AlertTriangle, CheckCircle, TrendingUp, TrendingDown, Wallet, DollarSign, Target } from 'lucide-react';
+import Icono, { IconoCategoria, estiloCategoria } from '../iconos';
 import { MESES_ES } from '../constants';
 import { pagadoTarjeta, saldoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
 
-export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
+// ── Helper: aplana periodos → items ──────────────────────────
+const flatItems = (periodos) => {
+  if (!periodos || !Array.isArray(periodos) || periodos.length === 0) return [];
+  if (typeof periodos[0] === 'object' && 'items' in periodos[0])
+    return periodos.flatMap(p => p.items || []);
+  return periodos;
+};
+
+// Previsto, real y pendientes de cada grupo. También lo usa la lista de Gastos del celular.
+// Lo cargado a una tarjeta de credito no cuenta como gasto real hasta pagar la tarjeta.
+export function resumenGrupos(mesData, grupos = []) {
+  const { gastos = {}, tarjetas = [] } = mesData || {};
+  const idsCred = idsCredito(tarjetas);
+  return grupos.map(g => {
+    const items    = flatItems(gastos[g.id]);
+    const previsto = items.reduce((s, i) => s + (i.previsto || 0), 0);
+    const real     = items.filter(i => cuentaComoGastoReal(i, idsCred)).reduce((s, i) => s + (i.real || 0), 0);
+    const pend     = items.filter(i => i.pagado !== true && (i.previsto || 0) > 0)
+                          .map(i => ({ ...i, tipo: g.nombre, grupoId: g.id }));
+    const pct      = previsto > 0 ? Math.min(105, Math.round((real / previsto) * 100)) : 0;
+    return { grupo: g, previsto, real, pend, pct };
+  });
+}
+
+export default function Dashboard({ mesData, mes, año, onIrA, grupos = [], onTicket }) {
   if (!mesData) return <div className="loading-state">Cargando...</div>;
+
+  // Acceso rápido "Carrito": la primera categoría semanal (normalmente Supermercado)
+  const grupoCarrito = grupos.find(g => g.frecuencia === 'semanal' || g.tipo === 'semanas');
 
   const { ingresos = [], gastos = {}, tarjetas = [], objetivoAhorro = 0 } = mesData;
 
@@ -14,27 +41,8 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
   const totalIngPrev = ingresos.reduce((s, i) => s + (i.previsto || 0), 0);
   const totalIngReal = ingresos.reduce((s, i) => s + (i.real    || 0), 0);
 
-  // ── Helper: aplana periodos → items ──────────────────────────
-  const flatItems = (periodos) => {
-    if (!periodos || !Array.isArray(periodos) || periodos.length === 0) return [];
-    if (typeof periodos[0] === 'object' && 'items' in periodos[0])
-      return periodos.flatMap(p => p.items || []);
-    return periodos;
-  };
-
   // ── Grupos dinámicos ──────────────────────────────────────────
-  // Lo cargado a una tarjeta de credito no cuenta como gasto real hasta pagar la tarjeta
-  const idsCred = idsCredito(tarjetas);
-
-  const gruposResumen = grupos.map(g => {
-    const items    = flatItems(gastos[g.id]);
-    const previsto = items.reduce((s, i) => s + (i.previsto || 0), 0);
-    const real     = items.filter(i => cuentaComoGastoReal(i, idsCred)).reduce((s, i) => s + (i.real || 0), 0);
-    const pend     = items.filter(i => i.pagado !== true && (i.previsto || 0) > 0)
-                          .map(i => ({ ...i, tipo: g.nombre, grupoId: g.id, emoji: g.icono || '' }));
-    const pct      = previsto > 0 ? Math.min(105, Math.round((real / previsto) * 100)) : 0;
-    return { grupo: g, previsto, real, pend, pct };
-  });
+  const gruposResumen = resumenGrupos(mesData, grupos);
 
   // ── Tarjetas ──────────────────────────────────────────────────
   const soloCredito = tarjetas.filter(t => t.tipo !== 'debito');
@@ -57,7 +65,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
     ...gruposResumen.flatMap(g => g.pend),
     ...tarjetasPend.map(t => ({
       nombre: t.nombre, previsto: saldoTarjeta(t), real: saldoTarjeta(t),
-      moneda: t.moneda, tipo: 'Tarjeta', emoji: '💳',
+      moneda: t.moneda, tipo: 'Tarjeta',
     })),
   ].sort((a, b) => (b.previsto || 0) - (a.previsto || 0));
 
@@ -69,18 +77,75 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
 
   return (
     <div className="page">
-      <div className="page-header">
+      <div className="page-header page-header--escritorio">
         <div>
-          <h1 className="page-title">📋 Dashboard — {MESES_ES[mes]} {año}</h1>
+          <h1 className="page-title">Inicio — {MESES_ES[mes]} {año}</h1>
           <p className="page-sub">Resumen general del mes</p>
         </div>
       </div>
+
+      {/* ── HERO (solo celular): lo que queda libre del mes ── */}
+      {(() => {
+        const usado = totalGastosPrev > 0 ? Math.min(100, Math.round(totalGastosReal / totalGastosPrev * 100)) : 0;
+        return (
+          <div className="movil-inicio">
+            <div className="dash-hero">
+              <span className="dh-label">Saldo libre del mes</span>
+              <span className={`dh-val ${saldoLibreReal < 0 ? 'neg' : ''}`}>{money(saldoLibreReal)}</span>
+              <div className="dh-bar"><div style={{ width: usado + '%' }} /></div>
+              <span className="dh-sub">Gastaste el {usado}% de lo previsto</span>
+              <div className="dh-nums">
+                <button onClick={() => onIrA('ingresos')}><span>Ingresos</span><strong>{money(totalIngReal)}</strong></button>
+                <button onClick={() => onIrA('gastos')}><span>Gastado</span><strong>{money(totalGastosReal)}</strong></button>
+                <button onClick={() => onIrA('resumen')}><span>Ahorro</span><strong>{money(objetivoAhorro)}</strong></button>
+              </div>
+            </div>
+
+            <div className="dh-accesos">
+              {onTicket && (
+                <button onClick={onTicket}><span><Icono nombre="camara" size={22} /></span>Ticket</button>
+              )}
+              <button onClick={() => onIrA('gastos')}><span><Icono nombre="pagar" size={22} /></span>Pagar</button>
+              {grupoCarrito && (
+                <button onClick={() => onIrA(`grupo_${grupoCarrito.id}`)}>
+                  <span className="violeta"><Icono nombre="carrito" size={22} /></span>Carrito
+                </button>
+              )}
+              <button onClick={() => onIrA('chat')}><span><Icono nombre="chat" size={22} /></span>Preguntar</button>
+            </div>
+
+            <div className="dh-pend">
+              <div className="dh-pend-cab">
+                <h2>Pendientes</h2>
+                <button onClick={() => onIrA('gastos')}>Ver todo · {pendItems.length}</button>
+              </div>
+              {pendItems.length === 0 ? (
+                <div className="dh-pend-lista"><p className="dh-pend-vacio">Todo al día, no hay pagos pendientes.</p></div>
+              ) : (
+                <div className="dh-pend-lista">
+                  {pendItems.slice(0, 5).map((item, i) => (
+                    <button key={i} className="dh-pend-item"
+                      onClick={() => onIrA(item.grupoId ? `grupo_${item.grupoId}` : 'tarjetas')}>
+                      <IconoCategoria grupo={{ id: item.grupoId || 'tarjeta', nombre: item.tipo }} size={38} />
+                      <span className="dh-pend-txt">
+                        <strong>{item.nombre}</strong>
+                        <small>{item.tipo}</small>
+                      </span>
+                      <span className="dh-pend-monto">{moneyDe(item.previsto, item.moneda)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── CARDS RESUMEN ── */}
       <div className="dash-cards">
 
         <div className="dash-card green">
-          <div className="dc-icon"><TrendingUp size={20}/></div>
+          <div className="dc-icon"><Icono nombre="ingresos" size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Ingresos</span>
             <span className="dc-val">{money(totalIngReal)}</span>
@@ -89,7 +154,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
         </div>
 
         <div className="dash-card red">
-          <div className="dc-icon"><TrendingDown size={20}/></div>
+          <div className="dc-icon"><Icono nombre="gastos" size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Gastos previstos</span>
             <span className="dc-val">{money(totalGastosPrev)}</span>
@@ -98,7 +163,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
         </div>
 
         <div className={`dash-card ${saldoLibreReal >= 0 ? 'teal' : 'orange'}`}>
-          <div className="dc-icon"><Wallet size={20}/></div>
+          <div className="dc-icon"><Icono nombre="efectivo" size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Saldo libre</span>
             <span className="dc-val">{money(saldoLibreReal)}</span>
@@ -107,7 +172,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
         </div>
 
         <div className="dash-card purple">
-          <div className="dc-icon"><DollarSign size={20}/></div>
+          <div className="dc-icon"><Icono nombre="tarjeta" size={20}/></div>
           <div className="dc-body">
             <span className="dc-label">Tarjetas pendientes</span>
             <span className="dc-val">{money(totalTarjetasPendUYU)}</span>
@@ -127,14 +192,14 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
         <div className="card pend-card">
           <div className="card-header-row">
             <h2 className="card-title">
-              <AlertTriangle size={16} className="icon-warn"/> Pagos pendientes
+              <Icono nombre="calendario" size={17} className="icon-warn"/> Pagos pendientes
             </h2>
             <span className="badge-red">{money(totalPendiente)}</span>
           </div>
 
           {pendItems.length === 0 ? (
             <div className="empty-pend">
-              <CheckCircle size={32} color="#0d9488"/>
+              <Icono nombre="pagar" size={32} color="#0d9488"/>
               <p>¡Todo al día! No hay pagos pendientes.</p>
             </div>
           ) : (
@@ -143,8 +208,9 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
                 <div key={i} className="pend-item"
                   onClick={() => item.grupoId && onIrA(`grupo_${item.grupoId}`)}
                   style={{ cursor: item.grupoId ? 'pointer' : 'default' }}>
+                  <IconoCategoria grupo={{ id: item.grupoId || 'tarjeta', nombre: item.tipo }} size={32} />
                   <div className="pend-info">
-                    <span className="pend-name">{item.emoji ? `${item.emoji} ` : ''}{item.nombre}</span>
+                    <span className="pend-name">{item.nombre}</span>
                     <span className="pend-tipo">{item.tipo}</span>
                   </div>
                   <div className="pend-montos">
@@ -163,17 +229,17 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
           <div className="pend-actions">
             {grupos.slice(0, 3).map(g => (
               <button key={g.id} className="btn-sm-outline" onClick={() => onIrA(`grupo_${g.id}`)}>
-                {g.icono || ''} {g.nombre}
+                <Icono nombre={estiloCategoria(g).icono} size={15} /> {g.nombre}
               </button>
             ))}
-            <button className="btn-sm-outline" onClick={() => onIrA('tarjetas')}>💳 Tarjetas</button>
+            <button className="btn-sm-outline" onClick={() => onIrA('tarjetas')}><Icono nombre="tarjeta" size={15} /> Tarjetas</button>
           </div>
         </div>
 
         {/* Progreso por grupos */}
         <div className="card">
           <div className="card-header-row">
-            <h2 className="card-title">📂 Avance por grupos</h2>
+            <h2 className="card-title"><Icono nombre="resumen" size={17} /> Avance por grupos</h2>
             <span className="badge-teal">{money(gruposResumen.reduce((s, g) => s + g.real, 0))}</span>
           </div>
           <div className="sem-resumen">
@@ -183,7 +249,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
               <div key={grupo.id} className="sem-row" style={{ cursor: 'pointer' }}
                 onClick={() => onIrA(`grupo_${grupo.id}`)}>
                 <div className="sem-info">
-                  <span className="sem-label">{grupo.icono ? `${grupo.icono} ` : ''}{grupo.nombre}</span>
+                  <span className="sem-label"><IconoCategoria grupo={grupo} size={26} /> {grupo.nombre}</span>
                   <span className="sem-monto">
                     {money(real)} <small style={{ color: '#94a3b8' }}>/ {money(previsto)}</small>
                   </span>
@@ -204,7 +270,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
               return (
                 <div className="sem-row" style={{ cursor: 'pointer' }} onClick={() => onIrA('tarjetas')}>
                   <div className="sem-info">
-                    <span className="sem-label">💳 Tarjetas</span>
+                    <span className="sem-label"><IconoCategoria grupo={{ id: 'tarjeta', nombre: 'Tarjetas' }} size={26} /> Tarjetas</span>
                     <span className="sem-monto">
                       {money(totalTarjetasRealUYU)} <small style={{ color: '#94a3b8' }}>/ {money(totalTarjetasPrevUYU)}</small>
                     </span>
@@ -227,7 +293,7 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
       {/* ── OBJETIVO DE AHORRO ── */}
       <div className="card ahorro-card">
         <div className="card-header-row">
-          <h2 className="card-title"><Target size={16}/> Objetivo de ahorro</h2>
+          <h2 className="card-title"><Icono nombre="ahorro" size={17}/> Objetivo de ahorro</h2>
           {objetivoAhorro > 0 && (
             <span className={`badge-${ahorroNeto >= objetivoAhorro ? 'teal' : 'purple'}`}>
               {ahorroPct}%
@@ -247,13 +313,13 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [] }) {
                   <span className="an-val">{money(objetivoAhorro)}</span>
                 </div>
                 <div>
-                  <span className="an-label">{ahorroNeto >= objetivoAhorro ? '✓ Superado en' : 'Faltan'}</span>
+                  <span className="an-label">{ahorroNeto >= objetivoAhorro ? 'Superado en' : 'Faltan'}</span>
                   <span className={`an-val ${ahorroNeto >= objetivoAhorro ? 'green' : 'orange'}`}>
                     {money(Math.abs(objetivoAhorro - ahorroNeto))}
                   </span>
                 </div>
                 <div>
-                  <span className="an-label">💵 Saldo libre</span>
+                  <span className="an-label">Saldo libre</span>
                   <span className={`an-val ${saldoLibreReal >= 0 ? 'green' : 'orange'}`}>{money(saldoLibreReal)}</span>
                 </div>
               </>

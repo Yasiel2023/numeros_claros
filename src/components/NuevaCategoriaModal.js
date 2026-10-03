@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { X, Loader } from 'lucide-react';
 import { FRECUENCIAS_GRUPO } from '../constants';
-import { ICONOS_RAPIDOS } from './OnboardingWizard';
+import { SelectorIconoCategoria } from '../iconos';
 
 export default function NuevaCategoriaModal({ nombresExistentes = [], onCrear, onClose }) {
-  const [icono, setIcono] = useState('📦');
+  const [icono, setIcono] = useState('');
   const [nombre, setNombre] = useState('');
   const [frecuencia, setFrecuencia] = useState('mensual');
   const [creando, setCreando] = useState(false);
@@ -33,7 +33,7 @@ export default function NuevaCategoriaModal({ nombresExistentes = [], onCrear, o
     <div className="presup-modal-overlay" onClick={() => !creando && onClose()}>
       <div className="presup-modal nueva-cat-modal" onClick={e => e.stopPropagation()}>
         <div className="presup-modal-header">
-          <span>➕ Nueva categoría de gastos</span>
+          <span>Nueva categoría de gastos</span>
           <button className="presup-modal-close" onClick={onClose} disabled={creando}><X size={14} /></button>
         </div>
 
@@ -42,16 +42,7 @@ export default function NuevaCategoriaModal({ nombresExistentes = [], onCrear, o
           y aparece también en los meses siguientes.
         </p>
 
-        <div className="nueva-cat-iconos">
-          {ICONOS_RAPIDOS.map(ic => (
-            <button
-              key={ic}
-              className={`ob-icono-opt${icono === ic ? ' selected' : ''}`}
-              onClick={() => setIcono(ic)}
-              disabled={creando}
-            >{ic}</button>
-          ))}
-        </div>
+        <SelectorIconoCategoria valor={icono} onChange={setIcono} disabled={creando} />
 
         <input
           className="presup-modal-input"

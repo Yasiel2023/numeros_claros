@@ -26,8 +26,8 @@ function ComprobanteCard({ c, grupos, onEliminar }) {
           <span className="comp-tienda">{c.tienda || 'Comprobante'}</span>
           <span className="comp-meta">
             {fmtFecha(c.fecha)} · {items.length} items
-            {c.tarjetaNombre && <> · {c.tarjetaTipo === 'debito' ? '🏧' : '💳'} {c.tarjetaNombre}</>}
-            {!c.tarjetaNombre && <> · 💵 Efectivo</>}
+            {c.tarjetaNombre && <> · {c.tarjetaNombre}</>}
+            {!c.tarjetaNombre && <> · Efectivo</>}
           </span>
         </div>
         <strong className="comp-total">{money(c.totalPagado)}</strong>
@@ -60,7 +60,7 @@ function ComprobanteCard({ c, grupos, onEliminar }) {
                         <>
                           {nombreGrupo(it.grupoId)} → {it.gasto}
                           {it.destino === 'nuevo' && <span className="comp-tag">nuevo</span>}
-                          {it.sugeridoIA && <span className="comp-tag ia">🤖</span>}
+                          {it.sugeridoIA && <span className="comp-tag ia">IA</span>}
                         </>
                       )}
                     </td>
@@ -105,7 +105,7 @@ export default function Comprobantes({ data = [], grupos = [], onEliminar }) {
     return (
       <div className="section-block">
         <p className="comp-vacio">
-          Todavía no cargaste comprobantes este mes. Usá <strong>📸 Cargar comprobante</strong> en el menú lateral.
+          Todavía no cargaste comprobantes este mes. Usá <strong>Cargar comprobante</strong> (el botón de la cámara).
         </p>
       </div>
     );

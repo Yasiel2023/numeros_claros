@@ -232,12 +232,12 @@ export default function AplicarDesglose({
       <div className="desglose-paso">
         <h3>Forma de pago</h3>
         <select className="desglose-item-select" value={tarjetaId} onChange={e => setTarjetaId(e.target.value)}>
-          <option value="">💵 Efectivo / sin tarjeta</option>
+          <option value="">Efectivo / sin tarjeta</option>
           {tarjetas.map(t => (
             <option key={t.id} value={t.id}>
               {t.tipo === 'debito'
-                ? `🏧 ${t.nombre} (débito · saldo ${money(saldoActualDebito(t))})`
-                : `💳 ${t.nombre} (crédito)`}
+                ? `${t.nombre} (débito · saldo ${money(saldoActualDebito(t))})`
+                : `${t.nombre} (crédito)`}
             </option>
           ))}
         </select>
@@ -261,7 +261,7 @@ export default function AplicarDesglose({
         <p className="desglose-paso-desc">Opcional: elegila una vez y después cambiá solo los items que vayan a otra.</p>
         <select className="desglose-item-select" value="" onChange={e => categoriaParaTodos(e.target.value)}>
           <option value="">Elegí una categoría...</option>
-          {grupos.map(g => <option key={g.id} value={g.id}>{g.icono} {g.nombre}</option>)}
+          {grupos.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
         </select>
       </div>
 
@@ -298,7 +298,7 @@ export default function AplicarDesglose({
                     onChange={e => elegirCategoria(idx, e.target.value)}
                   >
                     <option value="">Categoría...</option>
-                    {grupos.map(g => <option key={g.id} value={g.id}>{g.icono} {g.nombre}</option>)}
+                    {grupos.map(g => <option key={g.id} value={g.id}>{g.nombre}</option>)}
                   </select>
 
                   {a && periodos.length > 1 && (
@@ -321,11 +321,11 @@ export default function AplicarDesglose({
                     >
                       {gastos.map(nombre => (
                         <option key={nombre} value={nombre}>
-                          {nombre === a.sugerido ? '🤖 ' : ''}{nombre}{carrito.includes(nombre) ? ' 🛒' : ''}
+                          {nombre}{nombre === a.sugerido ? ' (IA)' : ''}{carrito.includes(nombre) ? ' · en el carrito' : ''}
                         </option>
                       ))}
-                      <option value={NUEVO}>➕ Crear nuevo "{item.nombre}"</option>
-                      <option value={IGNORAR}>🚫 No registrar</option>
+                      <option value={NUEVO}>+ Crear nuevo "{item.nombre}"</option>
+                      <option value={IGNORAR}>No registrar</option>
                     </select>
                   ))}
                 </div>

@@ -5,6 +5,7 @@
 
 import { MONEDAS, MONEDA_DEFAULT } from './moneda';
 import { llamarIA } from './iaCliente';
+import { ICONOS_CATEGORIA } from './iconos';
 
 // Achica la foto antes de enviarla: Groq acepta hasta 4MB en base64 y una foto
 // de celular suele pasarse. Además la consulta responde más rápido.
@@ -115,14 +116,14 @@ ${texto.trim() ? `\nCómo es el hogar, en palabras del usuario:\n"""${texto.trim
 Armá los GRUPOS de gastos con sus ITEMS. Reglas:
 - Cada grupo tiene una frecuencia: "mensual" (cuentas fijas: alquiler, luz, agua, internet, cuotas, colegio), "semanal" (supermercado, feria), "cada10dias" (combustible, transporte) o "quincenal".
 - MONTOS: NO estimes ni inventes montos. "previsto" es 0 salvo que el usuario o la planilla indiquen explícitamente el monto de ese gasto; en ese caso usá ese número tal cual (es el monto de UN período de la frecuencia del grupo).
-- Agrupá con criterio (5 a 9 grupos), nombres cortos en español y un emoji representativo por grupo.
+- Agrupá con criterio (5 a 9 grupos), nombres cortos en español y un ícono por grupo, elegido de esta lista (escribí la palabra exacta): ${ICONOS_CATEGORIA.map(i => i.icono).join(', ')}. Ej.: casa (vivienda), documento (impuestos), carrito (supermercado), auto, salud, colegio, ocio; gastos si ninguno encaja.
 - No incluyas ingresos ni ahorro como gastos.
 - En "notas" explicá en 1 o 2 frases qué supusiste al armar los grupos.
 
 Devolvé SOLO un JSON válido con esta estructura exacta:
 {
   "grupos": [
-    { "nombre": "Supermercado", "icono": "🛒", "frecuencia": "semanal",
+    { "nombre": "Supermercado", "icono": "carrito", "frecuencia": "semanal",
       "items": [ { "nombre": "Compra semanal", "previsto": número } ] }
   ],
   "notas": "texto"
@@ -134,7 +135,7 @@ Devolvé SOLO un JSON válido con esta estructura exacta:
     .slice(0, 15)
     .map(g => ({
       nombre: g.nombre.trim().slice(0, 40),
-      icono: typeof g.icono === 'string' && g.icono.trim() ? g.icono.trim().slice(0, 4) : '📦',
+      icono: ICONOS_CATEGORIA.some(i => i.icono === g.icono) ? g.icono : '',
       frecuencia: FRECUENCIAS.includes(g.frecuencia) ? g.frecuencia : 'mensual',
       items: (Array.isArray(g.items) ? g.items : [])
         .filter(i => i && typeof i.nombre === 'string' && i.nombre.trim())

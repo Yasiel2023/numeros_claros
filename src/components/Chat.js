@@ -1,6 +1,7 @@
 // src/components/Chat.js
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Send, Loader, AlertCircle, Brain, Save } from 'lucide-react';
+import Icono from '../iconos';
 import {
   preguntar, contextoAutomatico, contextoCompleto,
   cargarNotasContexto, guardarNotasContexto,
@@ -173,7 +174,7 @@ export default function Chat({
   return (
     <div className="chat-container">
       <div className="chat-header">
-        <h2>💬 Pregunta sobre tu presupuesto</h2>
+        <h2><Icono nombre="chat" size={20} /> Preguntas a la IA</h2>
         <button
           className={`btn-sm-outline chat-ctx-btn${verContexto ? ' activo' : ''}`}
           onClick={() => setVerContexto(v => !v)}
@@ -239,7 +240,7 @@ export default function Chat({
         )}
         {conversacion.map((msg, idx) => (
           <div key={idx} className={`chat-mensaje ${msg.rol}`}>
-            <div className="chat-rol">{msg.rol === 'usuario' ? 'Vos' : '🤖 Asistente'}</div>
+            <div className="chat-rol">{msg.rol === 'usuario' ? 'Vos' : 'Asistente'}</div>
             {msg.texto && <div className="chat-texto">{msg.texto}</div>}
             {msg.data && (
               <div className="chat-respuesta-estructurada">
@@ -267,7 +268,7 @@ export default function Chat({
 
                 {msg.consultas?.length > 0 && (
                   <div className="chat-consultas">
-                    🔎 Consultó: {msg.consultas.map(describirConsulta).join(' · ')}
+                    Consultó: {msg.consultas.map(describirConsulta).join(' · ')}
                   </div>
                 )}
               </div>
@@ -276,7 +277,7 @@ export default function Chat({
         ))}
         {loading && (
           <div className="chat-mensaje asistente">
-            <div className="chat-rol">🤖 Asistente</div>
+            <div className="chat-rol">Asistente</div>
             <div className="chat-texto">
               <Loader size={16} className="spin" /> Pensando y consultando tus datos...
             </div>
@@ -306,7 +307,7 @@ export default function Chat({
 
       {!apiKey && (
         <div className="chat-nota">
-          ⚙️ La IA todavía no está configurada. Pedile al administrador de la app que la active.
+          La IA todavía no está configurada. Pedile al administrador de la app que la active.
         </div>
       )}
     </div>

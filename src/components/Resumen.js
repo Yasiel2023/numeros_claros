@@ -3,6 +3,7 @@ import React from 'react';
 import { money, moneyDe, esSecundaria, simbolo } from '../moneda';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { pagadoTarjeta, idsCredito, cuentaComoGastoReal, previstoPropioTarjeta } from '../tarjetas';
+import { IconoCategoria } from '../iconos';
 
 
 export default function Resumen({ mesData, onChange, grupos = [] }) {
@@ -48,23 +49,23 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
   const chartData = [
     { name: 'Ingresos', prev: totalIngPrev, real: totalIngReal },
     ...gruposData.map(g => ({
-      name: (g.icono ? g.icono + ' ' : '') + g.nombre,
+      name: g.nombre,
       prev: g.prev,
       real: g.real,
     })),
     ...credito.filter(t => !esSecundaria(t.moneda)).map(t => ({
-      name: `💳 ${t.nombre}`,
+      name: t.nombre,
       prev: previstoPropioTarjeta(t, gastos),
       real: pagadoTarjeta(t),
     })),
     ...(objetivoAhorro > 0
-      ? [{ name: '🎯 Ahorro', prev: objetivoAhorro, real: objetivoAhorro }]
+      ? [{ name: 'Ahorro', prev: objetivoAhorro, real: objetivoAhorro }]
       : []),
   ];
 
   return (
     <div className="section-block">
-      <h2 className="section-title">📊 Resumen del Mes</h2>
+      <h2 className="section-title">Resumen del mes</h2>
 
       <div className="resumen-grid">
         <div className="resumen-table-wrap">
@@ -74,14 +75,14 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
             </thead>
             <tbody>
               <tr className="row-ingreso">
-                <td>💼 Ingresos</td>
+                <td><span className="res-nombre"><IconoCategoria grupo={{ icono: 'ingresos' }} size={24} /> Ingresos</span></td>
                 <td className="total-val pos">{money(totalIngPrev)}</td>
                 <td className="total-val pos">{money(totalIngReal)}</td>
                 <td>—</td>
               </tr>
               {gruposData.map(g => (
                 <tr key={g.id}>
-                  <td>{g.icono ? `${g.icono} ` : ''}{g.nombre}</td>
+                  <td><span className="res-nombre"><IconoCategoria grupo={g} size={24} /> {g.nombre}</span></td>
                   <td>{money(g.prev)}</td>
                   <td className={g.real > 0 ? 'neg' : ''}>{money(g.real)}</td>
                   <td>{totalIngPrev > 0 ? Math.round(g.prev / totalIngPrev * 100) : 0}%</td>
@@ -95,7 +96,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
                 return (
                   <tr key={t.id || t.nombre}>
                     <td>
-                      💳 {t.nombre}{esUSD && <span className="badge-fijo">{t.moneda}</span>}
+                      <span className="res-nombre"><IconoCategoria grupo={{ icono: 'tarjeta' }} size={24} /> {t.nombre}</span>{esUSD && <span className="badge-fijo">{t.moneda}</span>}
                       {propio < (t.monto || 0) && (
                         <span className="resumen-nota-tarjeta">
                           deuda {montoT(t.monto || 0)} — el resto ya está en sus grupos
@@ -111,7 +112,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
               {objetivoAhorro > 0 && (
                 <tr className="row-ahorro">
                   <td>
-                    🎯 Ahorro 
+                    <span className="res-nombre"><IconoCategoria grupo={{ icono: 'ahorro' }} size={24} /> Ahorro</span>{' '}
                     <input
                       type="number" className="cell-input obj-ahorro-input-inline"
                       value={objetivoAhorro || ''} min="0" placeholder="0"
@@ -157,7 +158,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
 
       {/* Saldo Presupuestado vs Real */}
       <div className="saldo-summary-block">
-        <h3 className="sub-title">💵 Saldo del mes</h3>
+        <h3 className="sub-title">Saldo del mes</h3>
         <div className="saldo-summary-grid">
           {/* Presupuestado */}
           <div className="saldo-col">
@@ -196,7 +197,7 @@ export default function Resumen({ mesData, onChange, grupos = [] }) {
 
         {objetivoAhorro === 0 && (
           <div className="obj-ahorro-row">
-            <label className="obj-ahorro-label">🎯 Objetivo de ahorro</label>
+            <label className="obj-ahorro-label">Objetivo de ahorro</label>
             <input type="number" className="cell-input obj-ahorro-input" value={objetivoAhorro || ''} min="0"
               onChange={e => onChange({ ...mesData, objetivoAhorro: parseFloat(e.target.value) || 0 })}
               placeholder="0" />
