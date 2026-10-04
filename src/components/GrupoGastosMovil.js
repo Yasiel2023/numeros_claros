@@ -28,7 +28,7 @@ export function Hoja({ titulo, onClose, children }) {
   );
 }
 
-function HojaPagar({ item, grupoNombre, tarjetas, onConfirmar, onClose }) {
+export function HojaPagar({ item, grupoNombre, tarjetas, onConfirmar, onClose }) {
   const [monto, setMonto] = useState(String(montoDe(item) || ''));
   const [medio, setMedio] = useState('');
   const opciones = tarjetasDisponibles(tarjetas);
@@ -72,7 +72,7 @@ function HojaPagar({ item, grupoNombre, tarjetas, onConfirmar, onClose }) {
   );
 }
 
-function HojaEditar({ item, onGuardar, onEliminar, onClose }) {
+export function HojaEditar({ item, onGuardar, onEliminar, onClose }) {
   const nuevo = !item;
   const [nombre, setNombre]     = useState(item?.nombre || '');
   const [previsto, setPrevisto] = useState(item ? String(item.previsto || '') : '');

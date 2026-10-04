@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import Ingresos from './components/Ingresos';
-import GrupoGastos, { aplicarPagoTarjeta, periodosDelMes, esPeriodo } from './components/GrupoGastos';
+import GrupoGastos, { aplicarPagoTarjeta, periodosDelMes, esPeriodo, pagarEnPeriodos } from './components/GrupoGastos';
 import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
 import Resumen from './components/Resumen';
@@ -18,7 +18,9 @@ import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financi
 import { LogOut, ChevronLeft, ChevronRight, Save, Loader, Briefcase, Plus, X, UserPlus, Menu } from 'lucide-react';
 import GastosLista from './components/GastosLista';
 import MasMovil from './components/MasMovil';
-import Icono, { estiloCategoria, IconoCategoria } from './iconos';
+import Icono, { IconoCategoria } from './iconos';
+import useEsMovil from './useEsMovil';
+import GastosWeb from './components/GastosWeb';
 import DefaultsManager from './components/DefaultsManager';
 import CompartirModal from './components/CompartirModal';
 import InvitacionesBanner from './components/InvitacionesBanner';
@@ -35,6 +37,7 @@ import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONE
 import Chat from './components/Chat';
 import './App.css';
 import './movil.css';
+import './web.css';
 
 // Dibuja los modales directamente en <body>. Si se renderizan dentro del sidebar,
 // en el celular su transform los posiciona relativos al menú y no a la pantalla.
@@ -131,12 +134,12 @@ const NOMBRES_VISIBLES = { compras: 'Supermercado' };
 const nombreVisibleGrupo = (nombre) =>
   NOMBRES_VISIBLES[(nombre || '').trim().toLowerCase()] || nombre;
 
-const NAV_FIJOS_INICIO = [
+// Menú lateral (computadora). Las categorías de gastos están dentro de "Gastos".
+const NAV_SECCIONES = [
   { key: 'dashboard', label: 'Inicio',    icono: 'casa' },
-  { key: 'ingresos',  label: 'Ingresos',  icono: 'ingresos' },
-];
-const NAV_FIJOS_FIN = [
+  { key: 'gastos',    label: 'Gastos',    icono: 'gastos' },
   { key: 'tarjetas',   label: 'Tarjetas',        icono: 'tarjeta' },
+  { key: 'ingresos',  label: 'Ingresos',  icono: 'ingresos' },
   { key: 'comprobantes', label: 'Comprobantes',  icono: 'recibo' },
   { key: 'resumen',    label: 'Resumen',          icono: 'resumen' },
   { key: 'caja',       label: 'Caja de ahorro',  icono: 'ahorro' },
@@ -212,20 +215,13 @@ function AppInterna() {
   const gruposDB = toArray(defaults?.grupos_gastos || []);
   const grupos = gruposDB.map(g => ({ ...g, nombre: nombreVisibleGrupo(g.nombre) }));
 
-  // NAV dinámico (Ingresos fijos + un ítem por cada grupo + secciones finales)
-  const NAV = [
-    ...NAV_FIJOS_INICIO,
-    ...grupos.map(g => ({
-      key:     `grupo_${g.id}`,
-      label:   g.nombre,
-      icono:   estiloCategoria(g).icono,
-      grupoId: g.id,
-    })),
-    // Acción (no vista): agregar una categoría a mitad de mes
-    { key: '__nueva_categoria', label: 'Nueva categoría', icono: 'mas', accion: true },
-    // Configuración (clave de IA del sistema) solo para admins
-    ...NAV_FIJOS_FIN.filter(n => n.key !== 'config' || admins?.[user?.uid] === true),
-  ];
+  // Configuración (clave de IA del sistema) solo para admins
+  const NAV = NAV_SECCIONES.filter(n => n.key !== 'config' || admins?.[user?.uid] === true);
+  // Nombre de la vista actual (las categorías se abren como grupo_<id>)
+  const tituloVista = vista.startsWith('grupo_')
+    ? (grupos.find(g => `grupo_${g.id}` === vista)?.nombre || 'Gastos')
+    : (NAV.find(n => n.key === vista)?.label || '');
+  const esMovil = useEsMovil();
 
   // Clave del mes en RTDB: "2026_2" (año_mesIndex0basado)
   const mesKey = `${año}_${mes}`;
@@ -840,6 +836,41 @@ function AppInterna() {
     return <OnboardingWizard onCreate={handleOnboardingCreate} ia={{ apiKey: groqApiKey, url: groqUrl }} />;
   }
 
+  // Pagar un pendiente desde Inicio (computadora), con la misma lógica que en la categoría
+  const pagarDesdeInicio = (grupoId, pIdx, iIdx, tarjetaId, monto) => {
+    const grupo = grupos.find(g => g.id === grupoId);
+    if (!grupo || !mesData) return;
+    const periodos = periodosDelMes(mesData.gastos?.[grupoId], grupo, año, mes);
+    const res = pagarEnPeriodos(periodos, pIdx, iIdx, mesData.tarjetas || [], tarjetaId, monto);
+    if (!res) return;
+    updateMesData({
+      ...mesData,
+      gastos: { ...(mesData.gastos || {}), [grupoId]: res.periodos },
+      ...(res.tarjetas ? { tarjetas: res.tarjetas } : {}),
+    });
+  };
+
+  // Detalle de una categoría. key: al cambiar de categoría arranca de cero (pestaña, paneles).
+  const vistaGrupo = (grupo) => (
+    <GrupoGastos
+      key={grupo.id}
+      grupo={grupo}
+      data={periodosDelMes(mesData?.gastos?.[grupo.id], grupo, año, mes)}
+      tarjetas={mesData?.tarjetas || []}
+      onChange={(periodos, tarjetas) =>
+        updateMesData({
+          ...mesData,
+          gastos: { ...(mesData?.gastos || {}), [grupo.id]: periodos },
+          ...(tarjetas ? { tarjetas } : {}),
+        })
+      }
+      anio={año}
+      mes={mes}
+      onVolver={() => setVista('gastos')}
+      onCargarComprobante={groqApiKey ? () => setShowFotoModal(true) : null}
+    />
+  );
+
   // Se muestra en el menú lateral (computadora) y en la pestaña Más (celular)
   const invitacionesBanner = invitaciones.length > 0 && (
     <InvitacionesBanner
@@ -885,7 +916,7 @@ function AppInterna() {
 
         {/* Selector de presupuesto */}
         <div className="presup-selector">
-          <Briefcase size={13} className="presup-icon" />
+          <Icono nombre="casa" size={16} className="presup-icon" />
           <select
             value={presupuestoActual || ''}
             onChange={e => setPresupuestoActual(e.target.value)}
@@ -1041,7 +1072,7 @@ function AppInterna() {
         )}
         <div className="mes-selector">
           <button className="mes-nav-btn" onClick={mesAnterior}><ChevronLeft size={16}/></button>
-          <span className="mes-label">{MESES_ES[mes].slice(0, 3)} {año}</span>
+          <span className="mes-label">{MESES_ES[mes]} {año}</span>
           <button className="mes-nav-btn" onClick={mesSiguiente}><ChevronRight size={16}/></button>
         </div>
 
@@ -1057,28 +1088,31 @@ function AppInterna() {
         )}
 
         <nav className="sidebar-nav">
-          {NAV.map(({ key, label, icono, accion }) => (
-            <button key={key} className={`nav-item ${accion ? 'nav-item-nueva' : ''} ${vista === key ? 'active' : ''}`}
-              disabled={accion && !defaults}
-              onClick={() => {
-                if (accion) setShowNuevaCategoria(true);
-                else setVista(key);
-                closeSidebar();
-              }}>
-              <Icono nombre={icono} size={18} />
-
-              <span>{label}</span>
-              {key === 'dashboard' && pendTotal > 0 && (
-                <span className="nav-badge">{pendTotal}</span>
-              )}
-            </button>
-          ))}
+          {NAV.map(({ key, label, icono }) => {
+            const activo = vista === key || (key === 'gastos' && vista.startsWith('grupo_'));
+            return (
+              <button key={key} className={`nav-item ${activo ? 'active' : ''}`}
+                aria-current={activo ? 'page' : undefined}
+                onClick={() => { setVista(key); closeSidebar(); }}>
+                <Icono nombre={icono} size={18} />
+                <span>{label}</span>
+                {key === 'gastos' && pendTotal > 0 && (
+                  <span className="nav-badge">{pendTotal}</span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="sidebar-footer">
           <div className="user-info">
             <div className="user-ava">{initiales}</div>
-            <span className="user-nm">{nombre}</span>
+            <span className="user-txt">
+              <span className="user-nm">{nombre}</span>
+              <span className="user-rol">
+                {rolActual === 'owner' ? 'Dueño' : 'Miembro'} · {monedasActivas.principal}{monedasActivas.secundaria ? ` + ${MONEDAS[monedasActivas.secundaria]?.simbolo || monedasActivas.secundaria}` : ''}
+              </span>
+            </span>
           </div>
           <button className="logout-btn" onClick={logout} title="Cerrar sesión">
             <LogOut size={15}/>
@@ -1099,7 +1133,7 @@ function AppInterna() {
                 ? 'Plantillas de datos'
                 : vista === 'caja'
                 ? 'Caja de Ahorro'
-                : `${NAV.find(n => n.key === vista)?.label || 'Gastos'} — ${MESES_ES[mes]} ${año}`
+                : `${tituloVista} — ${MESES_ES[mes]} ${año}`
               }
             </h2>
             {/* Celular: título corto, el mes va a la derecha */}
@@ -1114,7 +1148,7 @@ function AppInterna() {
                 : vista === 'mas' ? 'Más'
                 : vista === 'plantillas' ? 'Plantillas'
                 : vista === 'caja' ? 'Caja de ahorro'
-                : NAV.find(n => n.key === vista)?.label}
+                : tituloVista}
             </h2>
           </div>
           <div className="topbar-right">
@@ -1232,6 +1266,8 @@ function AppInterna() {
                 <Dashboard
                   mesData={mesData} mes={mes} año={año} grupos={grupos}
                   onTicket={groqApiKey ? () => setShowFotoModal(true) : null}
+                  nombre={nombre}
+                  onPagarItem={pagarDesdeInicio}
                   onIrA={key =>
                     // Compatibilidad con claves legacy
                     setVista(['basicos','impuestos','asceo','ocio','semanas'].includes(key)
@@ -1250,39 +1286,30 @@ function AppInterna() {
                 </div>
               )}
 
-              {/* ── Grupos de gastos dinamicos (todos via GrupoGastos con periodos) ── */}
-              {vista.startsWith('grupo_') && (() => {
-                const grupoId = vista.replace('grupo_', '');
-                const grupo   = grupos.find(g => g.id === grupoId);
-                if (!grupo) return null;
+              {/* Celular: una categoría a pantalla completa (se abre desde la pestaña Gastos) */}
+              {esMovil && vista.startsWith('grupo_') && (() => {
+                const grupo = grupos.find(g => `grupo_${g.id}` === vista);
+                return grupo ? <div className="page">{vistaGrupo(grupo)}</div> : null;
+              })()}
+
+              {/* Computadora: lista de categorías + detalle de la elegida */}
+              {!esMovil && (vista === 'gastos' || vista.startsWith('grupo_')) && (() => {
+                const grupo = grupos.find(g => `grupo_${g.id}` === vista) || grupos[0];
                 return (
-                  <div className="page">
-                    <div className="page-header page-header--escritorio">
-                      <h1 className="page-title"><IconoCategoria grupo={grupo} size={30} /> {grupo.nombre} — {MESES_ES[mes]} {año}</h1>
-                    </div>
-                    <GrupoGastos
-                      grupo={grupo}
-                      data={periodosDelMes(mesData?.gastos?.[grupoId], grupo, año, mes)}
-                      tarjetas={mesData?.tarjetas || []}
-                      onChange={(periodos, tarjetas) =>
-                        updateMesData({
-                          ...mesData,
-                          gastos: { ...(mesData?.gastos || {}), [grupoId]: periodos },
-                          ...(tarjetas ? { tarjetas } : {}),
-                        })
-                      }
-                      anio={año}
-                      mes={mes}
-                      onVolver={() => setVista('gastos')}
-                      onCargarComprobante={groqApiKey ? () => setShowFotoModal(true) : null}
-                    />
-                  </div>
+                  <GastosWeb
+                    mesData={mesData}
+                    grupos={grupos}
+                    seleccionado={grupo?.id}
+                    onElegir={id => setVista(`grupo_${id}`)}
+                    onNuevaCategoria={defaults ? () => setShowNuevaCategoria(true) : null}
+                  >
+                    {grupo ? vistaGrupo(grupo) : <p className="ggw-vacio">Todavía no hay categorías.</p>}
+                  </GastosWeb>
                 );
               })()}
 
               {vista === 'tarjetas' && (
                 <div className="page">
-                  <div className="page-header page-header--escritorio"><h1 className="page-title"><Icono nombre="tarjeta" size={22} className="page-title-ico" /> Tarjetas — {MESES_ES[mes]} {año}</h1></div>
                   <Tarjetas
                     data={mesData?.tarjetas}
                     gastos={mesData?.gastos}
@@ -1351,7 +1378,7 @@ function AppInterna() {
               {vista === 'config' && esAdmin && (
                 <Config onGuardado={cargarGroqConfig} />
               )}
-              {vista === 'gastos' && (
+              {esMovil && vista === 'gastos' && (
                 <GastosLista
                   mesData={mesData}
                   grupos={grupos}

@@ -5,6 +5,7 @@ import { ref, get, set, remove } from 'firebase/database';
 import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { FRECUENCIAS_GRUPO } from '../constants';
+import { IconoCategoria, SelectorIconoCategoria } from '../iconos';
 import { Plus, Trash2, Save, Loader, Copy, Target, ChevronRight, FileText, AlertCircle, Check, X, Download } from 'lucide-react';
 
 

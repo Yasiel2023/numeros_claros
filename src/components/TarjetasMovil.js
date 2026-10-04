@@ -342,6 +342,7 @@ export default function TarjetasMovil({
   data, gastos, financiaciones, anio, mes,
   cuotasPendientes, onAplicarCuotas, tarjetasPreviasLabel, onImportarTarjetasPrevias,
   onAgregar, onActualizar, onEliminar, onPagarCredito, onDeshacerPagos, onChangeFinanciaciones,
+  web = false, // computadora: encabezado grande y tarjetas a la izquierda, cuotas a la derecha
 }) {
   const [hoja, setHoja] = useState(null); // { tipo, idx }
 
@@ -356,11 +357,23 @@ export default function TarjetasMovil({
   const cerrar = () => setHoja(null);
 
   return (
-    <div className="tm">
-      <div className="tm-cab">
-        <span>Deuda {money(deudaPrincipal)}{debito.length > 0 && <> · disponible {money(dispPrincipal)}</>}</span>
-        <button className="tm-agregar" onClick={() => setHoja({ tipo: 'nueva' })} aria-label="Agregar tarjeta"><Icono nombre="mas" size={22} grosor={2.4} /></button>
-      </div>
+    <div className={`tm ${web ? 'tm--web' : ''}`}>
+      {web ? (
+        <div className="web-cab">
+          <div>
+            <span className="web-sub">Deuda de crédito {money(deudaPrincipal)}{debito.length > 0 && <> · débito disponible {money(dispPrincipal)}</>}</span>
+            <h1 className="web-h1">Tarjetas</h1>
+          </div>
+          <button className="ggw-btn" onClick={() => setHoja({ tipo: 'nueva' })}>
+            <Icono nombre="mas" size={16} grosor={2.4} /> Agregar tarjeta
+          </button>
+        </div>
+      ) : (
+        <div className="tm-cab">
+          <span>Deuda {money(deudaPrincipal)}{debito.length > 0 && <> · disponible {money(dispPrincipal)}</>}</span>
+          <button className="tm-agregar" onClick={() => setHoja({ tipo: 'nueva' })} aria-label="Agregar tarjeta"><Icono nombre="mas" size={22} grosor={2.4} /></button>
+        </div>
+      )}
 
       {data.length === 0 && tarjetasPreviasLabel && (
         <div className="tm-banner">
@@ -389,6 +402,8 @@ export default function TarjetasMovil({
         </div>
       )}
 
+      <div className="tm-cuerpo">
+      <div className="tm-tarjetas">
       {credito.map(t => {
         const saldo = saldoTarjeta(t);
         const total = t.monto || 0;
@@ -442,6 +457,8 @@ export default function TarjetasMovil({
         );
       })}
 
+      </div>
+
       <div className="tm-cuotas">
         <div className="tm-cuotas-cab">
           <h2>Compras en cuotas</h2>
@@ -477,6 +494,8 @@ export default function TarjetasMovil({
             </div>
           );
         })}
+      </div>
+
       </div>
 
       {hoja?.tipo === 'nueva' && (
