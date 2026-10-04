@@ -15,7 +15,7 @@ const montoDe = (i) => (i.real !== undefined ? (i.real || 0) : (i.previsto || 0)
 export default function GrupoGastosWeb({
   grupo, periodos, periodoInicial = 0, tarjetas,
   modoCarrito, setModoCarrito, vaciarCarrito,
-  onUpdatePeriodo, onPagar, onDespagar, onEliminar, onCargarComprobante,
+  onUpdatePeriodo, onPagar, onDespagar, onEliminar, onCargarComprobante, onEliminarCategoria,
 }) {
   const [sel, setSel] = useState(Math.min(periodoInicial, periodos.length - 1));
   const [pagando, setPagando]   = useState(null);
@@ -73,6 +73,12 @@ export default function GrupoGastosWeb({
           <button className="ggw-btn" onClick={() => setEditando('nuevo')}>
             <Icono nombre="mas" size={16} grosor={2.4} /> Agregar gasto
           </button>
+          {onEliminarCategoria && (
+            <button className="btn-eliminar-cat" onClick={onEliminarCategoria}
+              aria-label={`Eliminar la categoría ${grupo?.nombre}`} title="Eliminar categoría">
+              <Trash2 size={17} />
+            </button>
+          )}
         </div>
       </div>
 

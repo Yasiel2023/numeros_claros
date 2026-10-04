@@ -90,7 +90,8 @@ function revertirPagoTarjeta(tarjetas, tarjetaId, monto, movId) {
     if (t.tipo === 'debito') {
       return { ...t, saldos: (t.saldos || []).filter(s => s.id !== movId) };
     }
-    return { ...t, monto: Math.max(0, (t.monto || 0) - monto) };
+    // Sin tope en 0: con ajustes a favor el total de la tarjeta puede ser negativo
+    return { ...t, monto: (t.monto || 0) - monto };
   });
 }
 
@@ -163,7 +164,7 @@ export function toPeriodos(data) {
 //   data    � array de periodos [{numero, label, items:[]}]  o items planos (compat)
 //   onChange � callback con el array de periodos actualizado
 // =============================================================================
-export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [], onVolver, onCargarComprobante }) {
+export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas = [], onVolver, onCargarComprobante, onEliminarCategoria }) {
   const esMovil = useEsMovil();
 
   // Modo carrito: preferencia de este navegador, recordada por categoría
@@ -265,6 +266,7 @@ export default function GrupoGastos({ grupo, data, onChange, anio, mes, tarjetas
       onEliminar={eliminarItem}
       onVolver={onVolver}
       onCargarComprobante={onCargarComprobante}
+      onEliminarCategoria={onEliminarCategoria}
     />
   );
 }

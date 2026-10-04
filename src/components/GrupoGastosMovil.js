@@ -122,7 +122,7 @@ export function HojaEditar({ item, onGuardar, onEliminar, onClose }) {
 export default function GrupoGastosMovil({
   grupo, periodos, periodoInicial = 0, anio, mes, tarjetas,
   modoCarrito, setModoCarrito, vaciarCarrito,
-  onUpdatePeriodo, onPagar, onDespagar, onEliminar, onVolver, onCargarComprobante,
+  onUpdatePeriodo, onPagar, onDespagar, onEliminar, onVolver, onCargarComprobante, onEliminarCategoria,
 }) {
   const [sel, setSel] = useState(Math.min(periodoInicial, periodos.length - 1));
   const [pagando, setPagando]   = useState(null);  // índice del item
@@ -171,10 +171,18 @@ export default function GrupoGastosMovil({
     <div className={`ggm ${modoCarrito && carrito.length > 0 ? 'ggm--con-pie' : ''}`}>
       <div className="ggm-barra">
         <button className="ggm-volver" onClick={onVolver} aria-label="Volver a Gastos"><Icono nombre="atras" size={22} grosor={2.4} /></button>
-        <button className={`ggm-carrito ${modoCarrito ? 'activo' : ''}`} aria-pressed={modoCarrito}
-          onClick={() => setModoCarrito(!modoCarrito)}>
-          <Icono nombre="carrito" size={18} grosor={2.2} /> Carrito
-        </button>
+        <span className="ggm-barra-der">
+          {onEliminarCategoria && (
+            <button className="btn-eliminar-cat" onClick={onEliminarCategoria}
+              aria-label={`Eliminar la categoría ${grupo?.nombre}`}>
+              <Trash2 size={18} />
+            </button>
+          )}
+          <button className={`ggm-carrito ${modoCarrito ? 'activo' : ''}`} aria-pressed={modoCarrito}
+            onClick={() => setModoCarrito(!modoCarrito)}>
+            <Icono nombre="carrito" size={18} grosor={2.2} /> Carrito
+          </button>
+        </span>
       </div>
 
       <div className="ggm-titulo">

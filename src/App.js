@@ -411,6 +411,21 @@ function AppInterna() {
     setVista(`grupo_${nueva.id}`);
   };
 
+  // ── Eliminar una categoría de gastos (solo dueño) ────────────────
+  // Sale de _defaults: deja de aparecer y de sumarse en todos los meses (los cálculos
+  // recorren `grupos`). Del mes actual se borran sus datos, para que tampoco los lea la
+  // IA; los meses anteriores conservan lo guardado como historial.
+  const eliminarCategoria = async (grupoId) => {
+    const lista = gruposDB.filter(g => g.id !== grupoId);
+    await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_defaults/grupos_gastos`), lista);
+    setDefaults(prev => ({ ...(prev || {}), grupos_gastos: lista }));
+    if (mesData?.gastos?.[grupoId]) {
+      const { [grupoId]: _borrada, ...gastos } = mesData.gastos;
+      updateMesData({ ...mesData, gastos });
+    }
+    setVista('gastos');
+  };
+
   // ── Cambiar las monedas del presupuesto activo (solo dueño) ─────
   // No convierte montos. Actualiza _meta y el código de moneda de tarjetas (todos los
   // meses) y cuotas para que sigan siendo "principal" o "secundaria".
@@ -868,6 +883,11 @@ function AppInterna() {
       mes={mes}
       onVolver={() => setVista('gastos')}
       onCargarComprobante={groqApiKey ? () => setShowFotoModal(true) : null}
+      onEliminarCategoria={rolActual === 'owner' ? () => {
+        if (window.confirm(`¿Eliminar la categoría "${grupo.nombre}"?\n\nDeja de aparecer y de sumarse en todos los meses. Lo cargado en ella este mes se borra; los meses anteriores quedan guardados.`)) {
+          eliminarCategoria(grupo.id).catch(e => window.alert(`No se pudo eliminar: ${e.message}`));
+        }
+      } : null}
     />
   );
 
@@ -1268,6 +1288,10 @@ function AppInterna() {
                   onTicket={groqApiKey ? () => setShowFotoModal(true) : null}
                   nombre={nombre}
                   onPagarItem={pagarDesdeInicio}
+                  onCambiarTasas={cambios => updateMesData({
+                    ...mesData,
+                    tarjetas: (mesData.tarjetas || []).map((t, i) => i in cambios ? { ...t, tasa: cambios[i] } : t),
+                  })}
                   onIrA={key =>
                     // Compatibilidad con claves legacy
                     setVista(['basicos','impuestos','asceo','ocio','semanas'].includes(key)

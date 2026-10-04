@@ -13,7 +13,8 @@ export const esCredito = (t) => t && t.tipo !== 'debito';
 export const pagadoTarjeta = (t) =>
   t.montoPagado !== undefined ? (t.montoPagado || 0) : (t.pagado ? (t.monto || 0) : 0);
 
-export const saldoTarjeta = (t) => Math.max(0, (t.monto || 0) - pagadoTarjeta(t));
+// Puede ser negativo: con ajustes a favor (cargos negativos) la tarjeta queda con saldo a favor
+export const saldoTarjeta = (t) => (t.monto || 0) - pagadoTarjeta(t);
 
 export const montoCargado = (item) =>
   item.tarjetaMonto !== undefined ? item.tarjetaMonto : (item.real || 0);
@@ -46,5 +47,6 @@ export const cuentaComoGastoReal = (item, idsCred) =>
 
 // Lo que la tarjeta aporta al presupuesto previsto: cuotas + cargos propios.
 // Se descuentan los gastos cargados a la tarjeta porque ya estan previstos en su grupo.
+// Puede ser negativo si los ajustes a favor superan las cuotas y cargos.
 export const previstoPropioTarjeta = (t, gastos) =>
-  Math.max(0, (t.monto || 0) - montoGastosDeTarjeta(gastos, t.id));
+  (t.monto || 0) - montoGastosDeTarjeta(gastos, t.id);

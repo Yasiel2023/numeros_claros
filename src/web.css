@@ -157,6 +157,41 @@ button.dw-kpi:hover { box-shadow: inset 0 0 0 1.5px #C9DCD7; }
   font-size: 14px; font-weight: 600; color: var(--teal); cursor: pointer; }
 .dw-cargar:hover { background: var(--teal-l); }
 
+/* ── Botón eliminar categoría (web y celular) ── */
+.btn-eliminar-cat { width: 40px; height: 40px; flex-shrink: 0; border: 1px solid #DCE3E0; border-radius: 12px; background: var(--surface);
+  color: #6B7A76; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.btn-eliminar-cat:hover { color: #B42318; border-color: #F5C2BE; background: #FEF2F2; }
+.ggm-barra-der { display: flex; align-items: center; gap: 8px; }
+
+/* ── Cómo va el mes (Inicio, web y celular) ── */
+.cvm { background: var(--surface); border-radius: 20px; padding: 16px 18px; display: flex; flex-direction: column; }
+.cvm h2 { margin: 0 0 6px; font-size: 17px; font-weight: 700; }
+.cvm-fila { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; padding: 6px 0; border: none;
+  background: none; font-family: var(--font); font-size: 14px; color: #5B6B66; text-align: left; cursor: pointer; }
+.cvm-fila strong { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.cvm-fila:hover span { color: var(--teal-d); }
+.cvm-total { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 8px 0 6px; margin-top: 2px;
+  border-top: 1.5px solid #D4DCD9; font-size: 14px; font-weight: 700; color: var(--text); }
+.cvm-total strong { font-size: 17px; font-weight: 800; white-space: nowrap; }
+.cvm-final strong { font-size: 24px; color: #15803D; letter-spacing: -0.4px; }
+.cvm-total.neg strong { color: #B42318; }
+.cvm-nota { margin: 6px 0 0; font-size: 12px; color: #6B7A76; }
+.cvm-vacio p { margin: 0 0 8px; font-size: 14px; color: #5B6B66; }
+.cvm-fila-sec { align-items: flex-start; }
+.cvm-sec-montos { display: flex; flex-direction: column; align-items: flex-end; }
+.cvm-sec-montos small { font-size: 12px; color: #6B7A76; white-space: nowrap; }
+.cvm-sec-montos small.cvm-sin-tasa { color: #B45309; font-weight: 600; }
+.cvm-hoja-ayuda { margin: 0; font-size: 14px; color: #5B6B66; }
+.cvm-tasa-fila { display: flex; align-items: flex-end; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #EEF2F1; }
+.cvm-tasa-nombre { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; }
+.cvm-tasa-nombre strong { font-size: 15px; }
+.cvm-tasa-nombre small { font-size: 13px; color: #6B7A76; }
+.cvm-tasa-campo { flex: 0 0 150px; }
+.tm-tasa { display: flex; align-items: center; gap: 10px; }
+.tm-tasa input { flex: 1; min-width: 0; }
+.tm-tasa em { font-style: normal; font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.tm-credito-aprox { font-size: 13px; color: #C7C3F5; }
+
 /* ── Tarjetas en la computadora ── */
 .tm--web { gap: 18px; }
 .tm--web .tm-cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }

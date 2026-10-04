@@ -250,6 +250,12 @@
 .tm-detalle .hoja-seccion { margin-bottom: 6px; }
 .tm-fila { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid #EEF2F1; font-size: 15px; }
 .tm-fila > span { flex: 1; min-width: 0; }
+.tm-fila-editar { flex: 1; min-width: 0; padding: 0; border: none; background: none; font-family: var(--font); font-size: 15px;
+  color: var(--text); text-align: left; cursor: pointer; }
+.tm-fila-editar:hover { color: var(--teal-d); text-decoration: underline; }
+.tm-fila.editando { background: var(--teal-l); border-radius: 10px; padding-left: 8px; padding-right: 4px; }
+.tm-ayuda { font-size: 12px; color: var(--text3); }
+.tm-cargo .tm-link { align-self: flex-start; }
 .tm-fila em { font-style: normal; font-size: 12px; color: var(--text3); }
 .tm-fila em.tm-cuota { color: #4F46E5; font-weight: 700; }
 .tm-fila > strong { flex-shrink: 0; font-weight: 700; }

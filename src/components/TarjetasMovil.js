@@ -109,6 +109,8 @@ function HojaPagarCredito({ tarjeta, debitos, onPagar, onClose }) {
 function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago, onEliminar, onClose }) {
   const [concepto, setConcepto] = useState('');
   const [montoCargo, setMontoCargo] = useState('');
+  const [esAjuste, setEsAjuste] = useState(false);   // ajuste a favor: se guarda negativo
+  const [editandoId, setEditandoId] = useState(null); // cargo que se está editando
   const mt = (n) => moneyTarjeta(n, tarjeta.moneda);
 
   const cuotas     = tarjeta.cuotas || [];
@@ -121,17 +123,43 @@ function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago
   const totalCargos = cargos.reduce((s, c) => s + (c.monto || 0), 0);
   const sinDetallar = total - totalCuotas - totalGastos - totalCargos;
 
-  const agregarCargo = () => {
-    const m = parseFloat(montoCargo);
-    if (!concepto.trim() || isNaN(m) || m <= 0) return;
-    const d = new Date();
-    const fecha = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-    onUpdate({ ...tarjeta, cargos: [...cargos, { id: `cg_${Date.now().toString(36)}`, concepto: concepto.trim(), monto: m, fecha }], monto: total + m });
-    setConcepto(''); setMontoCargo('');
+  // El monto se escribe positivo; si es un ajuste a favor se guarda negativo
+  const montoForm = Math.abs(parseFloat(montoCargo) || 0);
+  const formValido = concepto.trim() && montoForm > 0;
+
+  const limpiarForm = () => { setConcepto(''); setMontoCargo(''); setEsAjuste(false); setEditandoId(null); };
+
+  const guardarCargo = () => {
+    if (!formValido) return;
+    const valor = esAjuste ? -montoForm : montoForm;
+    if (editandoId) {
+      const viejo = cargos.find(c => c.id === editandoId);
+      if (!viejo) { limpiarForm(); return; }
+      onUpdate({
+        ...tarjeta,
+        cargos: cargos.map(c => c.id === editandoId ? { ...c, concepto: concepto.trim(), monto: valor } : c),
+        monto: total - (viejo.monto || 0) + valor,
+      });
+    } else {
+      const d = new Date();
+      const fecha = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      onUpdate({ ...tarjeta, cargos: [...cargos, { id: `cg_${Date.now().toString(36)}`, concepto: concepto.trim(), monto: valor, fecha }], monto: total + valor });
+    }
+    limpiarForm();
   };
 
-  const eliminarCargo = (c) =>
-    onUpdate({ ...tarjeta, cargos: cargos.filter(x => x.id !== c.id), monto: Math.max(0, total - (c.monto || 0)) });
+  const editarCargo = (c) => {
+    setEditandoId(c.id);
+    setConcepto(c.concepto || '');
+    setMontoCargo(String(Math.abs(c.monto || 0)));
+    setEsAjuste((c.monto || 0) < 0);
+  };
+
+  const eliminarCargo = (c) => {
+    if (editandoId === c.id) limpiarForm();
+    onUpdate({ ...tarjeta, cargos: cargos.filter(x => x.id !== c.id), monto: total - (c.monto || 0) });
+  };
+  const saldo = saldoTarjeta(tarjeta);
 
   return (
     <Hoja titulo={tarjeta.nombre} onClose={onClose}>
@@ -139,6 +167,18 @@ function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago
         <span>Nombre de la tarjeta</span>
         <input value={tarjeta.nombre} onChange={e => onUpdate({ ...tarjeta, nombre: e.target.value })} />
       </label>
+
+      {esSecundaria(tarjeta.moneda) && (
+        <label className="hoja-campo">
+          <span>Tasa para estimar ({monedaPrincipal()} por 1 {tarjeta.moneda})</span>
+          <span className="tm-tasa">
+            <input type="number" inputMode="decimal" min="0" step="0.01" placeholder="Ej: 40,5"
+              value={tarjeta.tasa || ''}
+              onChange={e => onUpdate({ ...tarjeta, tasa: parseFloat(e.target.value) || 0 })} />
+            {Number(tarjeta.tasa) > 0 && <em>≈ {money(saldo * Number(tarjeta.tasa))}</em>}
+          </span>
+        </label>
+      )}
 
       <div className="tm-detalle">
         <span className="hoja-seccion">Composición de la deuda</span>
@@ -155,9 +195,11 @@ function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago
           </div>
         ))}
         {cargos.map(c => (
-          <div key={c.id} className="tm-fila">
-            <span>{c.concepto} <em>cargo · {c.fecha}</em></span>
-            <strong>{mt(c.monto)}</strong>
+          <div key={c.id} className={`tm-fila ${editandoId === c.id ? 'editando' : ''}`}>
+            <button className="tm-fila-editar" onClick={() => editarCargo(c)} title="Editar">
+              {c.concepto} <em>{(c.monto || 0) < 0 ? 'ajuste' : 'cargo'} · {c.fecha}</em>
+            </button>
+            <strong className={(c.monto || 0) < 0 ? 'verde' : ''}>{(c.monto || 0) < 0 ? `−${mt(-c.monto)}` : mt(c.monto)}</strong>
             <button className="tm-borrar" onClick={() => eliminarCargo(c)} aria-label={`Eliminar ${c.concepto}`}><Trash2 size={15} /></button>
           </div>
         ))}
@@ -170,20 +212,31 @@ function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago
             <strong className="verde">−{mt(p.monto)}</strong>
           </div>
         ))}
-        <div className="tm-fila total"><span>Saldo a pagar</span><strong>{mt(saldoTarjeta(tarjeta))}</strong></div>
+        <div className="tm-fila total">
+          <span>{saldo < 0 ? 'Saldo a favor' : 'Saldo a pagar'}</span>
+          <strong className={saldo < 0 ? 'verde' : ''}>{mt(Math.abs(saldo))}</strong>
+        </div>
       </div>
 
       <div className="tm-cargo">
-        <span className="hoja-seccion">Agregar un cargo</span>
+        <span className="hoja-seccion">{editandoId ? 'Editar cargo' : 'Agregar un cargo o ajuste'}</span>
+        <div className="tm-segmento">
+          <button className={!esAjuste ? 'sel' : ''} onClick={() => setEsAjuste(false)}>Cargo (suma)</button>
+          <button className={esAjuste ? 'sel' : ''} onClick={() => setEsAjuste(true)}>Ajuste a favor (resta)</button>
+        </div>
         <div className="hoja-fila">
           <label className="hoja-campo"><span className="sr-only">Concepto</span>
-            <input value={concepto} onChange={e => setConcepto(e.target.value)} placeholder="Ej: Nafta" /></label>
+            <input value={concepto} onChange={e => setConcepto(e.target.value)}
+              placeholder={esAjuste ? 'Ej: Devolución, bonificación' : 'Ej: Nafta'} /></label>
           <label className="hoja-campo tm-monto-corto"><span className="sr-only">Monto</span>
-            <input type="number" inputMode="decimal" min="0" value={montoCargo} onChange={e => setMontoCargo(e.target.value)} placeholder="Monto" /></label>
-          <button className="tm-mas" onClick={agregarCargo} aria-label="Agregar cargo" disabled={!concepto.trim() || !(parseFloat(montoCargo) > 0)}>
-            <Icono nombre="mas" size={20} grosor={2.4} />
+            <input type="number" inputMode="decimal" min="0" value={montoCargo} onChange={e => setMontoCargo(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && guardarCargo()} placeholder="Monto" /></label>
+          <button className="tm-mas" onClick={guardarCargo} aria-label={editandoId ? 'Guardar cargo' : 'Agregar cargo'} disabled={!formValido}>
+            <Icono nombre={editandoId ? 'check' : 'mas'} size={20} grosor={2.4} />
           </button>
         </div>
+        {editandoId && <button className="tm-link" onClick={limpiarForm}>Cancelar edición</button>}
+        {esAjuste && !editandoId && <small className="tm-ayuda">Baja la deuda de la tarjeta. Si supera lo que debés, queda saldo a favor.</small>}
       </div>
 
       <div className="hoja-acciones">
@@ -408,6 +461,7 @@ export default function TarjetasMovil({
         const saldo = saldoTarjeta(t);
         const total = t.monto || 0;
         const saldada = total > 0 && saldo === 0;
+        const aFavor = saldo < 0;
         const cuotas = (t.cuotas || []).reduce((s, c) => s + (c.monto || 0), 0);
         const resto = total - cuotas;
         const pagado = pagadoTarjeta(t);
@@ -418,8 +472,11 @@ export default function TarjetasMovil({
               <span className="tm-credito-tipo">Crédito · {t.moneda} <Icono nombre="adelante" size={14} grosor={2.4} /></span>
             </button>
             <div className="tm-credito-saldo">
-              <span>{saldada ? 'Saldada' : 'Saldo a pagar'}</span>
-              <strong>{moneyTarjeta(saldo, t.moneda)}</strong>
+              <span>{saldada ? 'Saldada' : aFavor ? 'Saldo a favor' : 'Saldo a pagar'}</span>
+              <strong>{moneyTarjeta(Math.abs(saldo), t.moneda)}</strong>
+              {esSecundaria(t.moneda) && Number(t.tasa) > 0 && saldo !== 0 && (
+                <small className="tm-credito-aprox">≈ {money(Math.abs(saldo) * Number(t.tasa))} (tasa {Number(t.tasa)})</small>
+              )}
             </div>
             <div className="tm-credito-pie">
               <span>
