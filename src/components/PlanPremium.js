@@ -3,6 +3,7 @@
 // más el aviso que se muestra arriba en las demás pantallas.
 import React, { useEffect, useState } from 'react';
 import Icono from '../iconos';
+import { moneyDe } from '../moneda';
 import { pagosDisponibles, iniciarPagos, obtenerPlanes, comprar, restaurar } from '../pagos';
 
 const fechaLarga = (iso) => (iso ? new Date(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
@@ -90,12 +91,14 @@ export default function PlanPremium({ suscripcion, user, soloLectura }) {
     }
   };
 
-  const { activa, premium, enPrueba, diasRestantes, restringido } = suscripcion || {};
+  const { activa, premium, enPrueba, diasRestantes, restringido, precio, moneda } = suscripcion || {};
+  // Precio mensual de la BD (sistema/suscripcion/precio); en Android se muestra el de Google Play
+  const precioTxt = precio ? moneyDe(precio, moneda || undefined) : '';
   const hasta = suscripcion?.suscripcion?.hasta;
   const cancelada = suscripcion?.suscripcion?.cancelada === true;
 
   let estado;
-  if (premium) estado = { clase: 'ok', titulo: 'Plan premium activo', detalle: hasta ? `${cancelada ? 'Termina' : 'Se renueva'} el ${fechaLarga(hasta)}${cancelada ? ' (no se va a renovar)' : ''}.` : 'Tenés acceso completo.' };
+  if (premium) estado = { clase: 'ok', titulo: 'Plan premium activo', detalle: hasta ? `${cancelada ? 'Termina' : 'Se renueva cada mes, el próximo cobro es'} el ${fechaLarga(hasta)}${cancelada ? ' (no se va a renovar)' : ''}.` : 'Tenés acceso completo.' };
   else if (!activa) estado = { clase: 'ok', titulo: 'Acceso completo', detalle: 'Por ahora tenés todas las funciones.' };
   else if (enPrueba) estado = { clase: 'prueba', titulo: `Prueba gratis: ${diasRestantes} día${diasRestantes !== 1 ? 's' : ''}`, detalle: 'Tenés todo incluido. Después podés seguir con la versión gratis o pasarte a premium.' };
   else estado = { clase: 'gratis', titulo: 'Versión gratis', detalle: 'Seguís usando la app sin IA y con un solo presupuesto.' };
@@ -128,16 +131,18 @@ export default function PlanPremium({ suscripcion, user, soloLectura }) {
               <div className="plan-precios">
                 {(planes || []).map(plan => (
                   <button key={plan.id} className="plan-precio" disabled={ocupado} onClick={() => suscribirse(plan)}>
-                    <span>{plan.titulo}</span>
-                    <strong>{plan.precio}</strong>
+                    <span>Premium mensual</span>
+                    <strong>{plan.precio} / mes</strong>
                   </button>
                 ))}
               </div>
               <button className="plan-link" disabled={ocupado} onClick={restaurarCompra}>Restaurar compra</button>
-              <p className="plan-nota">El cobro lo hace Google Play y se renueva solo. Podés cancelar cuando quieras desde Google Play.</p>
+              <p className="plan-nota">El cobro es mensual, lo hace Google Play y se renueva solo cada mes. Podés cancelar cuando quieras desde Google Play.</p>
             </>
           ) : (
-            <p className="plan-nota">La suscripción se contrata desde la app de Android de Números Claros. Después se activa también acá, con la misma cuenta.</p>
+            <p className="plan-nota">
+              {precioTxt ? `Premium cuesta ${precioTxt} por mes. ` : ''}La suscripción mensual se contrata desde la app de Android de Números Claros. Después se activa también acá, con la misma cuenta.
+            </p>
           )}
         </>
       )}

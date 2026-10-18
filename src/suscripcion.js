@@ -3,7 +3,8 @@
 // (sin IA y con un solo presupuesto propio editable).
 //
 // Datos en Realtime Database:
-//   sistema/suscripcion      { activa: boolean, dias_prueba: number }   (solo admins escriben)
+//   sistema/suscripcion      { activa: boolean, dias_prueba: number, precio: number, moneda: string }   (solo admins escriben)
+//       precio/moneda: precio MENSUAL que se muestra (en la app de Android se muestra el de Google Play)
 //       activa !== true → el sistema de suscripción está apagado y todos tienen todo.
 //   usuarios/{uid}/creadoEn  ISO de la primera vez que el usuario abrió la app (se escribe una sola vez)
 //   suscripciones/{uid}      { premium: boolean, hasta?: ISO }          (solo admins escriben)
@@ -31,10 +32,12 @@ export function calcularEstado({ config, creadoEn, suscripcion, esAdmin = false,
 
   // Sin el sistema activo, o sin saber cuándo empezó la prueba, no se restringe nada
   const restringido = activa && !premium && finPrueba !== null && !enPrueba;
-  return { activa, premium, enPrueba, diasRestantes, diasPrueba, restringido };
+  // Precio mensual que se muestra (se edita solo en la BD). El cobro real lo fija Google Play.
+  const precio = Number(config?.precio) > 0 ? Number(config.precio) : null;
+  return { activa, premium, enPrueba, diasRestantes, diasPrueba, restringido, precio, moneda: config?.moneda || '' };
 }
 
-const SIN_RESTRICCION = { activa: false, premium: false, enPrueba: false, diasRestantes: 0, diasPrueba: 0, restringido: false };
+const SIN_RESTRICCION = { activa: false, premium: false, enPrueba: false, diasRestantes: 0, diasPrueba: 0, restringido: false, precio: null, moneda: '' };
 
 // Carga el estado del usuario. `cargando` es true hasta tener los datos.
 export default function useSuscripcion(user, esAdmin) {

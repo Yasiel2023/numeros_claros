@@ -35,11 +35,14 @@ export async function iniciarPagos(uid) {
   return true;
 }
 
-// Planes a la venta (los define el "offering" actual de RevenueCat: mensual, anual…)
+// Plan a la venta: el mensual del "offering" actual de RevenueCat (su precio se fija en Google Play)
 export async function obtenerPlanes() {
   const Purchases = await sdk();
   const { current } = await Purchases.getOfferings();
-  return (current?.availablePackages || []).map(paquete => ({
+  // La suscripción es solo mensual: se ofrece el paquete MONTHLY (o el único que haya)
+  const todos = current?.availablePackages || [];
+  const mensuales = todos.filter(p => p.packageType === 'MONTHLY' || p.identifier === '$rc_monthly');
+  return (mensuales.length ? mensuales : todos.slice(0, 1)).map(paquete => ({
     paquete,
     id: paquete.identifier,
     titulo: paquete.product?.title?.replace(/\s*\(.*\)$/, '') || paquete.identifier,

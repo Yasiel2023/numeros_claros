@@ -14,11 +14,17 @@
 
 | Nodo | Contenido | Quién escribe |
 |------|-----------|---------------|
-| `sistema/suscripcion` | `{ activa: boolean, dias_prueba: number }` (por defecto 14 días) | admins, a mano en la consola |
+| `sistema/suscripcion` | `{ activa: boolean, dias_prueba: number, precio: number, moneda: string }` (14 días por defecto). `precio` y `moneda` son el precio **mensual** que se muestra | admins, a mano en la consola |
 | `usuarios/{uid}/creadoEn` | ISO de la primera apertura con esta versión (los usuarios que ya existían empiezan su prueba ese día) | el propio usuario, **una sola vez** (la regla no deja cambiarlo ni borrarlo) |
 | `suscripciones/{uid}` | `{ premium, hasta, cancelada, producto, tienda, evento, evento_ms, actualizado }` | solo admins y el Worker (cuenta de servicio) |
 
 Para dar premium a mano (pruebas o regalos): en la consola de Firebase, `suscripciones/{uid}` = `{ "premium": true, "hasta": "2027-01-01T00:00:00.000Z" }`.
+
+### 2.1 Precio mensual
+
+- La suscripción es **solo mensual** y se renueva sola cada mes hasta que el usuario la cancele en Google Play (entonces `cancelada: true` y sigue premium hasta `hasta`).
+- **El precio que se cobra lo fija Google Play** (Play Console, producto de suscripción mensual); no se puede cobrar un monto distinto desde la base. En la app de Android se muestra siempre el precio que informa Google Play. `sistema/suscripcion/precio` + `moneda` (por ejemplo `250` y `UYU`) es el precio que se muestra donde no hay Play (la web). Solo se edita en la BD: las reglas permiten escribirlo únicamente a admins.
+- **Hay que mantener los dos iguales**: si cambiás el precio en Play Console, cambiá también `precio` en la BD. Google aplica el cambio a los suscriptores actuales según su política (los avisa y, en algunos casos, necesitan aceptarlo).
 
 ## 3. Cálculo
 
@@ -57,13 +63,13 @@ App (Android) ──compra──► RevenueCat ──► Google Play
 
 ### Qué falta configurar afuera del código (checklist)
 
-1. **Google Play Console**: cuenta de desarrollador, app creada con el id `uy.numerosclaros.app`, APK/AAB firmado subido a una pista (interna alcanza para probar) y productos de suscripción (por ejemplo `premium_mensual`, `premium_anual`).
-2. **RevenueCat**: proyecto con la app de Android, credenciales de servicio de Google Play, *entitlement* `premium`, *offering* actual con los paquetes mensual/anual, y la clave pública de Android.
+1. **Google Play Console**: cuenta de desarrollador, app creada con el id `uy.numerosclaros.app`, APK/AAB firmado subido a una pista (interna alcanza para probar) y un único producto de suscripción **mensual** (por ejemplo `premium_mensual`) con su precio.
+2. **RevenueCat**: proyecto con la app de Android, credenciales de servicio de Google Play, *entitlement* `premium`, *offering* actual con el paquete mensual (`$rc_monthly`), y la clave pública de Android.
 3. **Webhook**: en RevenueCat apuntar a `https://numeros-claros-ia.numeros-claros-ia-worker.workers.dev/webhook/revenuecat` con el encabezado `Authorization: Bearer <secreto>`.
 4. **Secretos del Worker**: `npx wrangler secret put REVENUECAT_WEBHOOK_SECRET` y `npx wrangler secret put FIREBASE_SERVICE_ACCOUNT` (JSON de la cuenta de servicio de Firebase), luego `npx wrangler deploy`.
 5. **Reglas**: `npx firebase-tools deploy --only database` (nodos nuevos).
 6. **Compilar la app** con `REACT_APP_RC_ANDROID_KEY=<clave pública>` y `npm run android:sync`.
-7. **Activar**: en la consola, `sistema/suscripcion` = `{ "activa": true, "dias_prueba": 14 }`.
+7. **Activar**: en la consola, `sistema/suscripcion` = `{ "activa": true, "dias_prueba": 14, "precio": 250, "moneda": "UYU" }` (usá el mismo precio que cargaste en Play Console).
 
 > Sin los pasos 1 a 4 la pantalla del plan muestra "Todavía no hay planes disponibles" y la compra no es posible; el resto (prueba, restricciones y premium dado a mano) funciona igual.
 
