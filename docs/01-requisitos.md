@@ -148,7 +148,7 @@ Convenciones:
 | RF-CAJA-1 | M | Saldos UYU y USD calculados recorriendo los movimientos ([02 §9](./02-dominio-y-reglas.md#9-caja-de-ahorro)). |
 | RF-CAJA-2 | M | Movimientos: transferencia UYU→USD (monto UYU, tasa, fecha, descripción), depósito UYU, ajuste de saldo USD, ajuste de saldo UYU; historial con borrado. |
 | RF-CAJA-3 | S | Acceso rápido para transferir/depositar el ahorro del mes (precarga el objetivo de ahorro del mes). |
-| RF-CAJA-4 | M | **Descontar de una tarjeta**: al depositar o convertir se puede elegir una cuenta de débito del mes abierto (moneda principal) cuyo saldo baja en ese monto; el movimiento guarda la tarjeta y se revierte al eliminarlo (solo en el mes abierto). Ver [02 §9](./02-dominio-y-reglas.md#9-caja-de-ahorro). |
+| RF-CAJA-4 | M | **Descontar de una tarjeta**: al depositar o convertir se puede elegir una cuenta de débito del mes abierto (moneda principal) cuyo saldo baja en ese monto; el movimiento guarda la tarjeta y se revierte al eliminarlo (solo en el mes abierto). Ver [02 §9](./02-dominio-y-reglas.md#9-caja-de-ahorro). En la tarjeta "Objetivo de ahorro" hay un depósito rápido: el botón "Depositar ahorro $objetivo" (siempre pide confirmación) crea el depósito por el monto del objetivo y lo descuenta de la cuenta de débito elegida en el selector de la propia tarjeta (por defecto la primera). |
 
 ## 14. Comprobantes con IA (TICK)
 

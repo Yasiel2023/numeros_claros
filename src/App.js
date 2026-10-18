@@ -158,7 +158,26 @@ function AppInterna() {
   const { user, logout } = useAuth();
   const [mes, setMes] = useState(new Date().getMonth());
   const [año, setAño] = useState(new Date().getFullYear());
-  const [vista, setVista] = useState('dashboard');
+  // Cada cambio de pantalla se apunta en el historial del navegador: así el botón "atrás" del
+  // teléfono (WebView de Capacitor) vuelve a la pantalla anterior en vez de cerrar la app.
+  const [vista, setVistaEstado] = useState('dashboard');
+  const vistaRef = useRef('dashboard');
+  const setVista = useCallback((v) => {
+    if (v === vistaRef.current) return;
+    vistaRef.current = v;
+    window.history.pushState({ vista: v }, '');
+    setVistaEstado(v);
+  }, []);
+  useEffect(() => {
+    window.history.replaceState({ vista: 'dashboard' }, '');
+    const alVolver = (e) => {
+      const v = e.state?.vista || 'dashboard';
+      vistaRef.current = v;
+      setVistaEstado(v);
+    };
+    window.addEventListener('popstate', alVolver);
+    return () => window.removeEventListener('popstate', alVolver);
+  }, []);
   const [mesData, setMesData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

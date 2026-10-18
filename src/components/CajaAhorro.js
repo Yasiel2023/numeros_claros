@@ -103,9 +103,27 @@ export default function CajaAhorro({
     </div>
   );
 
+  // Tarjeta para el depósito rápido del objetivo: por defecto la primera cuenta de débito
+  const [objTarjeta, setObjTarjeta] = useState(null);
+  const [confirmandoDep, setConfirmandoDep] = useState(false);   // pregunta siempre antes de depositar
+  const objTarjetaSel = objTarjeta !== null ? objTarjeta : (tarjetasDebito[0]?.id || '');
+
+  // Deposita el objetivo del mes de una vez y, si se eligió una tarjeta, baja su saldo en ese monto
+  const depositarObjetivo = () => {
+    if (!(ahorroRealMes > 0)) return;
+    const descripcion = `Ahorro ${P} ${mesLabel}`;
+    onChange({ ...data, movimientos: [...movs, {
+      id: Date.now().toString(36), tipo: 'deposito_uyu',
+      fecha: new Date().toISOString().slice(0, 10),
+      descripcion,
+      montoUYU: ahorroRealMes,
+      ...descontar(objTarjetaSel, ahorroRealMes, descripcion),
+    }]});
+  };
+
   const openForm = (form, prefill = null) => {
     setActiveForm(f => f === form ? null : form);
-    if (prefill && form === 'transf') { setTransfUYU(String(prefill)); }
+    if (prefill && form === 'transf') { setTransfUYU(String(prefill)); setTransfTarjeta(objTarjetaSel); }
     if (prefill && form === 'depuyu') { setDepUYU(String(prefill)); }
   };
 
@@ -211,9 +229,31 @@ export default function CajaAhorro({
               <span className="caja-card-label">Objetivo de ahorro</span>
               <span className="caja-card-val pos">{money(ahorroRealMes)}</span>
               <div className="caja-obj-btns">
-                <button className="btn-obj-uyu" onClick={() => openForm('depuyu', ahorroRealMes)}>
-                  → Ahorrar en {P}
-                </button>
+                {puedeDescontar && (
+                  <select className="caja-obj-tarjeta" value={objTarjetaSel} onChange={e => setObjTarjeta(e.target.value)}
+                    aria-label="Descontar de">
+                    <option value="">No descontar de ninguna tarjeta</option>
+                    {tarjetasDebito.map(t => (
+                      <option key={t.id} value={t.id}>Descontar de {t.nombre} · saldo {money(saldoActualDebito(t))}</option>
+                    ))}
+                  </select>
+                )}
+                {confirmandoDep ? (
+                  <div className="caja-obj-confirmar" role="alertdialog">
+                    <span>
+                      ¿Depositar {money(ahorroRealMes)} en la caja de ahorro
+                      {objTarjetaSel ? ` y descontarlo de ${tarjetasDebito.find(t => t.id === objTarjetaSel)?.nombre || 'la tarjeta'}` : ''}?
+                    </span>
+                    <div>
+                      <button className="btn-cancel-caja" onClick={() => setConfirmandoDep(false)}>Cancelar</button>
+                      <button className="btn-confirm-caja" onClick={() => { setConfirmandoDep(false); depositarObjetivo(); }}>Depositar</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="btn-obj-uyu" onClick={() => setConfirmandoDep(true)}>
+                    + Depositar ahorro {money(ahorroRealMes)}
+                  </button>
+                )}
                 {S && (
                   <button className="btn-obj-usd" onClick={() => openForm('transf', ahorroRealMes)}>
                     → Convertir a {S}

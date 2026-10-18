@@ -2041,3 +2041,6 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .carr-check { width: 24px; height: 24px; border-radius: 50%; background: #6d28d9; color: #fff; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .carr-check.vacio { background: transparent; border: 2px solid var(--border, #d1d5db); }
 .carr-sacar { color: var(--text3, #9ca3af); }
+.caja-obj-tarjeta { width: 100%; max-width: 320px; margin: 6px 0 2px; padding: 6px 8px; border: 1px solid var(--border, #d1d5db); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
+.caja-obj-confirmar { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 10px; border-radius: 10px; background: #fff7ed; font-size: 13px; }
+.caja-obj-confirmar > div { display: flex; gap: 8px; }
