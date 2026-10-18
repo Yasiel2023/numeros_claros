@@ -105,7 +105,7 @@ features (UI) ──► state ──► data ──► core
 ### 2.4 Guardado del mes
 
 - Mantener el patrón de la web: estado local del mes + **escritura completa con debounce** (≈1,2 s) y estado "Guardando/Guardado".
-- Mejora recomendada: usar `onValue` (suscripción) en el mes activo para ver en vivo los cambios de otros miembros; ante conflicto, la última escritura gana (igual que hoy). Evaluar escrituras parciales con `update()` por ruta (`gastos/{g}/{p}/items/{i}`) en una versión posterior (ADR-005).
+- **Implementado (rama `feature/sincronizacion-tiempo-real`):** `onValue` en el mes activo, la caja, las cuotas y las categorías, ignorando el eco propio y las ediciones locales sin guardar (ADR-005). Ante conflicto gana la última escritura. Evaluar escrituras parciales con `update()` por ruta (`gastos/{g}/{p}/items/{i}`) en una versión posterior.
 
 ## 3. Decisiones de arquitectura (ADR)
 
@@ -134,8 +134,13 @@ features (UI) ──► state ──► data ──► core
 - **Flujo:** `npm run android:sync` (build + `cap sync android`) y `npm run android:open` (Android Studio).
 - **Consecuencia:** una sola base de código para web y Android. Prima sobre ADR-001 en el corto plazo; la app Expo sigue siendo opción a futuro.
 
-### ADR-005 — Escritura del mes completo
-- **Decisión v1:** igual que la web (simplicidad y compatibilidad). Riesgo: dos personas editando el mismo mes a la vez pueden pisarse. Mitigación v1: suscripción en vivo. Mejora futura: `update()` por ruta.
+### ADR-005 — Escritura del mes completo + sincronización en vivo
+- **Decisión v1:** igual que la web (simplicidad y compatibilidad). Riesgo: dos personas editando el mismo mes a la vez pueden pisarse. Mejora futura: `update()` por ruta.
+- **Sincronización en vivo (implementada en la web, rama `feature/sincronizacion-tiempo-real`):** el mes, la caja de ahorro, las cuotas (`_financiaciones`) y las categorías (`_defaults`) se leen con `onValue`, así que todos los dispositivos con el presupuesto abierto ven los cambios de los demás en segundos.
+  - **Eco propio:** `escribiendo.current.{mes|caja|fin}` cuenta las escrituras en curso de este dispositivo; mientras sea > 0 los avisos se ignoran (son lo que acabamos de guardar).
+  - **Ediciones sin guardar:** mientras corre el debounce de 1,2 s (`saveTimer`) los avisos remotos del mes se ignoran; al guardar, esas ediciones quedan (gana la última escritura). Por eso el riesgo de pisarse se reduce a cambios hechos en el mismo par de segundos.
+  - El mes no se vuelve a suscribir cuando cambian las categorías (depende de que *haya* defaults, no de su contenido) para no perder ediciones locales.
+  - No es en vivo: `_meta` (nombre y monedas del presupuesto), la lista de presupuestos e invitaciones (se leen al entrar).
 
 ### ADR-006 — Dominio compartible
 - **Decisión:** escribir `core/` en TypeScript sin dependencias, con tests. A futuro puede publicarse como paquete interno y reemplazar `tarjetas.js`/`financiaciones.js` de la web para tener una única implementación.

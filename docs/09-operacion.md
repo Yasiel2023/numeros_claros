@@ -104,7 +104,7 @@ eas submit -p android
 | D3 | Seguridad | ~~`admins` auto-asignable~~ **Resuelto**: `admins` es de solo lectura desde la app; se asigna a mano en la consola | — |
 | D4 | Funcional | No se puede revocar el acceso de un miembro | Regla + UI para que el dueño borre `accesos/{miembro}/{pid}` |
 | D5 | Rendimiento | Listar presupuestos lee `presupuestos/{uid}` completo | Listar desde `accesos/{uid}` |
-| D6 | Concurrencia | El mes se escribe completo: ediciones simultáneas se pisan | Suscripción en vivo; luego `update()` por ruta |
+| D6 | Concurrencia | El mes se escribe completo: ediciones simultáneas se pisan | **Mitigado** con sincronización en vivo (`onValue`, ADR-005): solo se pisan cambios hechos en el mismo par de segundos. Pendiente: `update()` por ruta |
 | D7 | Código | `App.js` concentra todo el estado (~1450 líneas); `toArray`/`encodeEmail` duplicados | En móvil: capas `core/data/state` |
 | D8 | IA | ~~Clave de Groq por usuario en el cliente~~ **Resuelto**: Worker de Cloudflare (ADR-004). Pendiente: límite por suscripción premium | Ver TODO en `ia-worker/src/index.js` |
 | D9 | Datos | ~~`gemini_api_key` en `config`~~ **Resuelto en la UI**: Configuración solo edita `sistema/ia`. Quedan datos legados en `config/{uid}` | Borrar el nodo `config` cuando se confirme |

@@ -1,7 +1,7 @@
 // src/App.js
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { ref, get, set, remove, update } from 'firebase/database';
+import { ref, get, set, remove, update, onValue } from 'firebase/database';
 // encodeEmail: '.' → ',' para claves RTDB
 const encodeEmail = (email) => email.replace(/\./g, ',');
 import { db } from './firebase';
@@ -217,6 +217,9 @@ function AppInterna() {
   // ── Estado modal nuevo mes ────────────────────────────────────
   const [nuevoMesPendiente, setNuevoMesPendiente] = useState(false);
   const saveTimer = useRef(null);
+  // Escrituras propias en curso por nodo: mientras haya alguna, los avisos de onValue son el eco
+  // de lo que este dispositivo acaba de guardar y se ignoran (ver docs/04, ADR-005).
+  const escribiendo = useRef({ mes: 0, caja: 0, fin: 0 });
   const [cajaData, setCajaData] = useState(null);
   // ── Compras en cuotas (nivel presupuesto) ─────────────────────
   const [financiaciones, setFinanciaciones] = useState([]);
@@ -310,35 +313,35 @@ function AppInterna() {
 
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
+  // En vivo: si otro dispositivo cambia la caja, se actualiza acá
   useEffect(() => {
-    if (!presupuestoActual || !ownerUidActual) return;
-    const cargarCaja = async () => {
-      try {
-        const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_caja_ahorro`));
-        if (snap.exists()) {
-          const raw = snap.val();
-          const movs = raw.movimientos
-            ? (Array.isArray(raw.movimientos)
-                ? raw.movimientos
-                : Object.keys(raw.movimientos).sort().map(k => raw.movimientos[k]))
-            : [];
-          setCajaData({ ...raw, movimientos: movs });
-        } else {
-          setCajaData({ movimientos: [] });
-        }
-      } catch (e) {
-        console.error('Error cargando caja:', e);
+    if (!presupuestoActual || !ownerUidActual) return undefined;
+    return onValue(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_caja_ahorro`), (snap) => {
+      if (escribiendo.current.caja > 0) return;
+      if (snap.exists()) {
+        const raw = snap.val();
+        const movs = raw.movimientos
+          ? (Array.isArray(raw.movimientos)
+              ? raw.movimientos
+              : Object.keys(raw.movimientos).sort().map(k => raw.movimientos[k]))
+          : [];
+        setCajaData({ ...raw, movimientos: movs });
+      } else {
         setCajaData({ movimientos: [] });
       }
-    };
-    cargarCaja();
-  }, [presupuestoActual, ownerUidActual]); // eslint-disable-line
+    }, (e) => {
+      console.error('Error cargando caja:', e);
+      setCajaData({ movimientos: [] });
+    });
+  }, [presupuestoActual, ownerUidActual]);
 
   const guardarCaja = useCallback(async (data) => {
     if (!presupuestoActual) return;
+    escribiendo.current.caja += 1;
     try {
       await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_caja_ahorro`), data);
     } catch (e) { console.error('Error guardando caja:', e); }
+    finally { escribiendo.current.caja -= 1; }
   }, [presupuestoActual, ownerUidActual]);
 
   const updateCajaData = useCallback((data) => {
@@ -349,26 +352,25 @@ function AppInterna() {
 
   // ── Cargar y guardar financiaciones (nivel presupuesto) ──────
   useEffect(() => {
-    if (!presupuestoActual || !ownerUidActual) return;
-    const cargarFin = async () => {
-      try {
-        const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`));
-        setFinanciaciones(snap.exists() ? toArray(snap.val()) : []);
-      } catch (e) {
-        console.error('Error cargando financiaciones:', e);
-        setFinanciaciones([]);
-      }
-    };
-    cargarFin();
+    if (!presupuestoActual || !ownerUidActual) return undefined;
+    return onValue(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`), (snap) => {
+      if (escribiendo.current.fin > 0) return;
+      setFinanciaciones(snap.exists() ? toArray(snap.val()) : []);
+    }, (e) => {
+      console.error('Error cargando financiaciones:', e);
+      setFinanciaciones([]);
+    });
   }, [presupuestoActual, ownerUidActual]);
 
   const updateFinanciaciones = useCallback(async (lista) => {
     if (soloLectura) return;
     setFinanciaciones(lista);
     if (!presupuestoActual) return;
+    escribiendo.current.fin += 1;
     try {
       await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`), lista);
     } catch (e) { console.error('Error guardando financiaciones:', e); }
+    finally { escribiendo.current.fin -= 1; }
   }, [presupuestoActual, ownerUidActual, soloLectura]);
 
   // ── Cargar plantillas globales /defaults ─────────────────────
@@ -662,12 +664,33 @@ function AppInterna() {
     cargarDefaults();
   }, [presupuestoActual, user.uid, presupuestos]); // eslint-disable-line
 
+  // Categorías en vivo: si otro dispositivo agrega o elimina una, aparece acá también
+  useEffect(() => {
+    if (!presupuestoActual || !ownerUidActual) return undefined;
+    return onValue(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_defaults`), (snap) => {
+      if (snap.exists()) setDefaults(snap.val());
+    }, (e) => console.error('Error escuchando categorías:', e));
+  }, [presupuestoActual, ownerUidActual]);
+
   // ── Cargar datos del mes ──────────────────────────────────────
-  const cargar = useCallback(async () => {
-    if (!presupuestoActual || !defaults) return;
+  // ── Mes en vivo ───────────────────────────────────────────────
+  // onValue avisa cada vez que el mes cambia en la base, también si lo cambió otro dispositivo
+  // con el mismo presupuesto abierto. Se ignoran:
+  //   - el eco de lo que este dispositivo está guardando (escribiendo.current.mes > 0);
+  //   - los avisos mientras hay ediciones locales esperando el guardado (saveTimer): esas
+  //     ediciones se guardan enseguida y son las que quedan (gana la última escritura).
+  // Depende de que haya defaults, no de su contenido: un cambio de categorías no vuelve a
+  // suscribir el mes (eso pisaría ediciones locales sin guardar).
+  const hayDefaults = !!defaults;
+  const defaultsRef = useRef(defaults);
+  defaultsRef.current = defaults;
+  useEffect(() => {
+    if (!presupuestoActual || !hayDefaults) return undefined;
     setLoading(true);
-    try {
-      const snap = await get(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${mesKey}`));
+    let primero = true;
+    return onValue(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${mesKey}`), (snap) => {
+      if (!primero && (escribiendo.current.mes > 0 || saveTimer.current)) return;
+      primero = false;
       if (snap.exists()) {
         setNuevoMesPendiente(false);
         setMesData(normalizeMesData(snap.val()));
@@ -675,29 +698,26 @@ function AppInterna() {
         // Mes sin datos: mostrar modal para seleccionar plantilla
         setMesData(null);
         setNuevoMesPendiente(true);
-        setLoading(false);
-        return;
       }
-    } catch (e) {
+      setLoading(false);
+    }, (e) => {
       console.error('Error cargando:', e);
-      setMesData(initMesData(año, mes, defaults));
-    }
-    setLoading(false);
-  }, [presupuestoActual, mesKey, año, mes, ownerUidActual, defaults]);
-
-  useEffect(() => {
-    if (presupuestoActual && defaults) cargar();
-  }, [cargar, presupuestoActual, defaults]);
+      setMesData(initMesData(año, mes, defaultsRef.current));
+      setLoading(false);
+    });
+  }, [presupuestoActual, mesKey, año, mes, ownerUidActual, hayDefaults]);
 
   // ── Auto-guardar con debounce ─────────────────────────────────
   const autoGuardar = useCallback(async (data) => {
     if (!data || !presupuestoActual) return;
     setSaving(true);
+    escribiendo.current.mes += 1;
     try {
       await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/${mesKey}`), data);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (e) { console.error('Error guardando:', e); }
+    finally { escribiendo.current.mes -= 1; }
     setSaving(false);
   }, [presupuestoActual, mesKey, ownerUidActual]);
 
@@ -705,7 +725,10 @@ function AppInterna() {
     if (soloLectura) return;   // versión gratis: los presupuestos extra son de solo lectura
     setMesData(newData);
     if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => autoGuardar(newData), 1200);
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null;   // ya no hay ediciones esperando: se vuelven a aceptar cambios remotos
+      autoGuardar(newData);
+    }, 1200);
   }, [autoGuardar, soloLectura]);
 
   // ── Ahorro descontado de una cuenta de débito (Caja de ahorro) ─────────────
