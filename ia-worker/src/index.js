@@ -1,12 +1,13 @@
 // ia-worker/src/index.js
 // Proxy de IA en Cloudflare Workers. La app nunca ve la clave de Groq:
 //   1. Verifica el ID token de Firebase del usuario (firma de Google, proyecto numeros-claros).
-//   2. Aplica un límite por usuario (Rate Limiting de Cloudflare; los admins no tienen límite).
-//   3. Elige el modelo según el tipo de pedido y reenvía a Groq con la clave (secreto GROQ_API_KEY).
+//   2. Con la suscripción activa (sistema/suscripcion), corta la IA a quien no es premium y ya terminó la prueba.
+//   3. Aplica un límite por usuario (Rate Limiting de Cloudflare; los admins no tienen límite).
+//   4. Elige el modelo según el tipo de pedido y reenvía a Groq con la clave (secreto GROQ_API_KEY).
 //
 // Para no gastar CPU (el plan gratuito da ~10 ms por pedido), el cuerpo NO se parsea:
 // la app manda el JSON listo para Groq sin "model" y el Worker solo le antepone el modelo.
-import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { createRemoteJWKSet, jwtVerify, importPKCS8, SignJWT } from 'jose';
 
 const PROYECTO = 'numeros-claros';
 const RTDB = 'https://numeros-claros-default-rtdb.firebaseio.com';
@@ -48,8 +49,96 @@ async function leerRTDB(ruta, token) {
   return r.ok ? r.json() : null;
 }
 
+const DIA_MS = 24 * 60 * 60 * 1000;
+const DIAS_PRUEBA_DEFAULT = 14;
+
+function tienePremium(sub) {
+  if (sub?.premium !== true) return false;
+  const hasta = sub.hasta ? Date.parse(sub.hasta) : null;
+  return hasta === null || Number.isNaN(hasta) || hasta > Date.now();
+}
+
+// true solo si se sabe cuándo empezó la prueba y ya pasaron los días configurados
+function pruebaVencida(cfgSub, creadoEn) {
+  const inicio = creadoEn ? Date.parse(creadoEn) : NaN;
+  if (Number.isNaN(inicio)) return false;
+  const dias = Number(cfgSub?.dias_prueba) >= 0 ? Number(cfgSub.dias_prueba) : DIAS_PRUEBA_DEFAULT;
+  return inicio + dias * DIA_MS <= Date.now();
+}
+
+// ── Webhook de RevenueCat (pagos de Google Play) ─────────────────────────────
+// RevenueCat avisa cada compra, renovación, cancelación o vencimiento. Acá se traduce a
+// suscripciones/{uid} = { premium, hasta, ... } en la base, con una cuenta de servicio
+// (las reglas no dejan a los usuarios escribir ese nodo).
+//   Secretos: REVENUECAT_WEBHOOK_SECRET (el mismo valor va en el encabezado Authorization
+//   del webhook de RevenueCat) y FIREBASE_SERVICE_ACCOUNT (JSON de la cuenta de servicio).
+const ACTIVAN = ['INITIAL_PURCHASE', 'RENEWAL', 'PRODUCT_CHANGE', 'UNCANCELLATION', 'NON_RENEWING_PURCHASE'];
+const MANTIENEN = ['CANCELLATION', 'BILLING_ISSUE', 'SUBSCRIPTION_PAUSED'];   // sigue premium hasta que venza
+let tokenServicio = { valor: '', vence: 0 };
+
+async function tokenDeServicio(env) {
+  if (tokenServicio.valor && tokenServicio.vence > Date.now() + 60_000) return tokenServicio.valor;
+  const cuenta = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+  const clave = await importPKCS8(cuenta.private_key, 'RS256');
+  const ahora = Math.floor(Date.now() / 1000);
+  const jwt = await new SignJWT({ scope: 'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email' })
+    .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
+    .setIssuer(cuenta.client_email).setSubject(cuenta.client_email)
+    .setAudience('https://oauth2.googleapis.com/token')
+    .setIssuedAt(ahora).setExpirationTime(ahora + 3600)
+    .sign(clave);
+  const r = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+  if (!r.ok) throw new Error(`Token de servicio: ${r.status}`);
+  const { access_token, expires_in } = await r.json();
+  tokenServicio = { valor: access_token, vence: Date.now() + expires_in * 1000 };
+  return access_token;
+}
+
+async function webhookRevenueCat(request, env) {
+  if (request.method !== 'POST') return new Response('Método no permitido', { status: 405 });
+  if (!env.REVENUECAT_WEBHOOK_SECRET || !env.FIREBASE_SERVICE_ACCOUNT) return new Response('No configurado', { status: 503 });
+  if (request.headers.get('Authorization') !== `Bearer ${env.REVENUECAT_WEBHOOK_SECRET}`) return new Response('No autorizado', { status: 401 });
+
+  const { event } = await request.json().catch(() => ({}));
+  const uid = event?.app_user_id;
+  // Solo usuarios de Firebase: los anónimos de RevenueCat y los eventos de prueba se ignoran
+  if (!event || !uid || uid.startsWith('$RCAnonymousID') || event.type === 'TEST') return new Response('ok');
+
+  let premium;
+  if (ACTIVAN.includes(event.type)) premium = true;
+  else if (event.type === 'EXPIRATION') premium = false;
+  else if (MANTIENEN.includes(event.type)) premium = undefined;
+  else return new Response('ok');
+
+  const token = await tokenDeServicio(env);
+  const ruta = `${RTDB}/suscripciones/${encodeURIComponent(uid)}.json`;
+  // Los avisos pueden llegar desordenados: se descarta el que sea más viejo que el guardado
+  const actual = await (await fetch(`${ruta}?access_token=${token}`)).json().catch(() => null);
+  if (actual?.evento_ms && event.event_timestamp_ms && actual.evento_ms > event.event_timestamp_ms) return new Response('ok');
+
+  const cambios = {
+    ...(premium !== undefined ? { premium } : {}),
+    ...(event.expiration_at_ms ? { hasta: new Date(event.expiration_at_ms).toISOString() } : {}),
+    ...(event.type === 'CANCELLATION' ? { cancelada: true } : premium === true ? { cancelada: false } : {}),
+    producto: event.product_id || null,
+    tienda: event.store || null,
+    evento: event.type,
+    evento_ms: event.event_timestamp_ms || Date.now(),
+    actualizado: new Date().toISOString(),
+  };
+  const r = await fetch(`${ruta}?access_token=${token}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cambios),
+  });
+  return new Response(r.ok ? 'ok' : 'Error al guardar', { status: r.ok ? 200 : 502 });
+}
+
 export default {
   async fetch(request, env) {
+    if (new URL(request.url).pathname === '/webhook/revenuecat') return webhookRevenueCat(request, env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors(request) });
     if (request.method !== 'POST') return error(request, 405, 'Método no permitido');
 
@@ -75,19 +164,28 @@ export default {
     if (largo > TAMANO_MAXIMO) return error(request, 413, 'El pedido es demasiado grande. Probá con una foto más chica.');
     if (!env.GROQ_API_KEY) return error(request, 503, 'La IA todavía no está configurada. Avisale al administrador.');
 
-    const [cfg, esAdmin] = await Promise.all([
+    const [cfg, esAdmin, cfgSub, creadoEn, suscripcion] = await Promise.all([
       leerRTDB('sistema/ia', token),
       leerRTDB(`admins/${uid}`, token),
+      leerRTDB('sistema/suscripcion', token),
+      leerRTDB(`usuarios/${uid}/creadoEn`, token),
+      leerRTDB(`suscripciones/${uid}`, token),
     ]);
     if (!cfg || cfg.activa !== true) return error(request, 503, 'La IA está desactivada por el administrador.');
 
-    // 3. Límite por usuario (TODO suscripciones: acá se verificará que sea premium)
+    // 3. Suscripción: con el sistema activo, la IA es solo para premium o durante la prueba
+    //    (mismo cálculo que src/suscripcion.js; los admins siempre pasan)
+    if (esAdmin !== true && cfgSub?.activa === true && !tienePremium(suscripcion) && pruebaVencida(cfgSub, creadoEn)) {
+      return error(request, 403, 'La IA es parte del plan premium. Tu prueba gratuita terminó.');
+    }
+
+    // 4. Límite por usuario
     if (esAdmin !== true && env.LIMITADOR) {
       const { success } = await env.LIMITADOR.limit({ key: uid });
       if (!success) return error(request, 429, 'Estás haciendo muchas consultas seguidas. Esperá un minuto.');
     }
 
-    // 4. Cuerpo: JSON de Groq sin "model" → se antepone el modelo sin parsear
+    // 5. Cuerpo: JSON de Groq sin "model" → se antepone el modelo sin parsear
     const cuerpo = (await request.text()).trim();
     if (!cuerpo.startsWith('{') || cuerpo.length > TAMANO_MAXIMO) return error(request, 400, 'Pedido de IA inválido.');
     const modelo = tipo === 'vision' ? MODELO_VISION : (cfg.groq_model || MODELO_CHAT_DEFAULT);

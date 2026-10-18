@@ -11,3 +11,7 @@ simple = { limit = 20, period = 60 }
 
 # La clave de Groq NO va acá: es un secreto.
 #   npx wrangler secret put GROQ_API_KEY
+
+# Pagos (RevenueCat → webhook en /webhook/revenuecat). Secretos:
+#   npx wrangler secret put REVENUECAT_WEBHOOK_SECRET
+#   npx wrangler secret put FIREBASE_SERVICE_ACCOUNT   (JSON de la cuenta de servicio de Firebase)

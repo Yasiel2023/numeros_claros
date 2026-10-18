@@ -30,7 +30,15 @@ config/
   {uid}/                 LEGADO: { groq_api_key?, groq_url?, groq_model?, gemini_api_key? }
                          ← ya no se lee ni se escribe; la IA usa sistema/ia y el Worker
 
+usuarios/
+  {uid}/creadoEn         ISO, se escribe una sola vez (rama de suscripción, ver 11)
+
+suscripciones/
+  {uid}                  { premium, hasta?, cancelada?, producto?, tienda?, evento?, evento_ms?, actualizado? }
+                         ← lo escribe el Worker (RevenueCat) o un admin; ver 11
+
 sistema/
+  suscripcion            { activa: boolean, dias_prueba: number }   ← solo admins
   ia                     { activa: boolean, groq_url?, groq_model?, actualizado: ISO }
                          ← lectura: cualquier usuario con sesión; escritura: solo admins.
                            NO contiene la clave de Groq (es un secreto del Worker)

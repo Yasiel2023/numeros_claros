@@ -23,6 +23,7 @@ Leé en este orden. Cada documento es autosuficiente pero asume los anteriores.
 | 08 | [Plan de implementación](./08-plan-de-implementacion.md) | Fases, tareas con checklist y criterios de salida para construir la app móvil |
 | 09 | [Operación y entorno](./09-operacion.md) | Proyecto Firebase, despliegues (web, Worker de IA, Android), comandos, estado del repo y deuda técnica |
 | 10 | [Cambios recientes](./10-cambios-recientes.md) | Qué cambió en el código respecto a la primera versión de esta documentación y qué documentos se tocaron |
+| 11 | [Suscripción premium](./11-suscripcion.md) | (Solo en la rama `feature/suscripcion-premium`) prueba gratis, versión gratis sin IA y con un presupuesto, y cobro con Google Play |
 
 ## Reglas de oro para quien implemente
 

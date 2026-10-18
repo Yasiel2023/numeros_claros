@@ -13,6 +13,8 @@ import GrupoGastos, { aplicarPagoTarjeta, periodosDelMes, esPeriodo, pagarEnPeri
 import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
 import Carrito from './components/Carrito';
+import useSuscripcion from './suscripcion';
+import PlanPremium, { AvisoPlan } from './components/PlanPremium';
 import Resumen from './components/Resumen';
 import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
 import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financiaciones';
@@ -146,12 +148,13 @@ const NAV_SECCIONES = [
   { key: 'resumen',    label: 'Resumen',          icono: 'resumen' },
   { key: 'caja',       label: 'Caja de ahorro',  icono: 'ahorro' },
   { key: 'chat',       label: 'Preguntas IA',    icono: 'chat' },
+  { key: 'plan',       label: 'Plan premium',     icono: 'ahorro' },
   { key: 'plantillas', label: 'Plantillas',       icono: 'documento' },
   { key: 'config',     label: 'Configuración',    icono: 'ajustes' },
 ];
 
 // En el celular estas secciones se abren desde la pestaña "Más"
-const VISTAS_DE_MAS = ['carrito', 'ingresos', 'comprobantes', 'resumen', 'caja', 'chat', 'plantillas', 'config'];
+const VISTAS_DE_MAS = ['plan', 'carrito', 'ingresos', 'comprobantes', 'resumen', 'caja', 'chat', 'plantillas', 'config'];
 
 // ── App interna (usuario autenticado) ─────────────────────────
 function AppInterna() {
@@ -225,7 +228,7 @@ function AppInterna() {
   // ── Admins ────────────────────────────────────────────
   const [admins, setAdmins] = useState({});
   // ── API Keys ──────────────────────────────────────────
-  const [groqApiKey, setGroqApiKey] = useState('');
+  const [iaSistema, setIaSistema] = useState(false);   // sistema/ia/activa
   const [groqUrl, setGroqUrl] = useState('https://api.groq.com/openai/v1');
   const [groqModel, setGroqModel] = useState('openai/gpt-oss-120b');
   // ── Flujo de foto + desglose ──────────────────────────
@@ -251,6 +254,27 @@ function AppInterna() {
   const ownerUidActual = presupuestos.find(p => p.id === presupuestoActual)?.ownerUid || user.uid;
   const rolActual = presupuestos.find(p => p.id === presupuestoActual)?.rol || 'owner';
 
+  const esAdmin = admins?.[user?.uid] === true;
+
+  // ── Suscripción: prueba completa y luego versión gratis (sin IA, un presupuesto) ──
+  const suscripcion = useSuscripcion(user, esAdmin);
+  // groqApiKey queda como bandera: no vacío = IA disponible (activa en el sistema y permitida al usuario)
+  const groqApiKey = iaSistema && !suscripcion.restringido ? 'servidor' : '';
+
+  // Crear un presupuesto: en la versión gratis solo se permite el primero
+  const abrirNuevoPresupuesto = () => {
+    if (!puedeCrearPresupuesto) { closeSidebar(); setVista('plan'); return; }
+    setNuevoNombre('');
+    setShowNuevoModal(true);
+  };
+
+  // Versión gratis (sin premium y con la prueba vencida): un solo presupuesto propio editable.
+  // Los demás propios se ven pero no se modifican. Los compartidos por otros no cuentan.
+  const propios = presupuestos.filter(p => p.rol === 'owner');
+  const idPrincipal = [...propios].sort((a, b) => (a.creadoEn || '').localeCompare(b.creadoEn || '') || a.id.localeCompare(b.id))[0]?.id;
+  const soloLectura = suscripcion.restringido && rolActual === 'owner' && presupuestoActual !== idPrincipal;
+  const puedeCrearPresupuesto = !suscripcion.restringido || propios.length === 0;
+
   // ── Cargar admins ────────────────────────────────────────────
   useEffect(() => {
     const cargarAdmins = async () => {
@@ -273,18 +297,17 @@ function AppInterna() {
     try {
       const snap = await get(ref(db, 'sistema/ia'));
       const cfg = snap.exists() ? snap.val() : {};
-      setGroqApiKey(cfg.activa === true ? 'servidor' : '');
+      setIaSistema(cfg.activa === true);
       if (cfg.groq_url) setGroqUrl(cfg.groq_url);
       if (cfg.groq_model) setGroqModel(cfg.groq_model);
     } catch (e) {
       console.error('Error leyendo sistema/ia:', e);
-      setGroqApiKey('');
+      setIaSistema(false);
     }
   }, [user?.uid]);
 
   useEffect(() => { cargarGroqConfig(); }, [cargarGroqConfig]);
 
-  const esAdmin = admins?.[user?.uid] === true;
 
   // ── Cargar y guardar Caja de Ahorro (nivel presupuesto) ──────
   useEffect(() => {
@@ -319,9 +342,10 @@ function AppInterna() {
   }, [presupuestoActual, ownerUidActual]);
 
   const updateCajaData = useCallback((data) => {
+    if (soloLectura) return;
     setCajaData(data);
     guardarCaja(data);
-  }, [guardarCaja]);
+  }, [guardarCaja, soloLectura]);
 
   // ── Cargar y guardar financiaciones (nivel presupuesto) ──────
   useEffect(() => {
@@ -339,12 +363,13 @@ function AppInterna() {
   }, [presupuestoActual, ownerUidActual]);
 
   const updateFinanciaciones = useCallback(async (lista) => {
+    if (soloLectura) return;
     setFinanciaciones(lista);
     if (!presupuestoActual) return;
     try {
       await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_financiaciones`), lista);
     } catch (e) { console.error('Error guardando financiaciones:', e); }
-  }, [presupuestoActual, ownerUidActual]);
+  }, [presupuestoActual, ownerUidActual, soloLectura]);
 
   // ── Cargar plantillas globales /defaults ─────────────────────
   useEffect(() => {
@@ -418,6 +443,7 @@ function AppInterna() {
   // Se suma a _defaults (aparece en el menú de todos los meses y en los meses nuevos)
   // y, si el mes actual existe, se le agregan sus períodos vacíos.
   const agregarCategoria = async ({ icono, nombre, frecuencia }) => {
+    if (soloLectura) { setShowNuevaCategoria(false); setVista('plan'); return; }
     const nueva = { id: genId(nombre), nombre, icono, frecuencia, items: [] };
     const lista = [...gruposDB, nueva];
     await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_defaults/grupos_gastos`), lista);
@@ -437,6 +463,7 @@ function AppInterna() {
   // recorren `grupos`). Del mes actual se borran sus datos, para que tampoco los lea la
   // IA; los meses anteriores conservan lo guardado como historial.
   const eliminarCategoria = async (grupoId) => {
+    if (soloLectura) { setVista('plan'); return; }
     const lista = gruposDB.filter(g => g.id !== grupoId);
     await set(ref(db, `presupuestos/${ownerUidActual}/${presupuestoActual}/_defaults/grupos_gastos`), lista);
     setDefaults(prev => ({ ...(prev || {}), grupos_gastos: lista }));
@@ -553,6 +580,7 @@ function AppInterna() {
               nombre: data[id]?._meta?.nombre || id,
               ownerUid: user.uid,
               rol: 'owner',
+              creadoEn: data[id]?._meta?.creadoEn || '',
             }));
         }
         // (Si no hay propios, no auto-creamos — el wizard de onboarding lo hará)
@@ -674,10 +702,11 @@ function AppInterna() {
   }, [presupuestoActual, mesKey, ownerUidActual]);
 
   const updateMesData = useCallback((newData) => {
+    if (soloLectura) return;   // versión gratis: los presupuestos extra son de solo lectura
     setMesData(newData);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => autoGuardar(newData), 1200);
-  }, [autoGuardar]);
+  }, [autoGuardar, soloLectura]);
 
   // ── Ahorro descontado de una cuenta de débito (Caja de ahorro) ─────────────
   // Baja el saldo de la tarjeta del mes abierto con un movimiento automático y devuelve su id
@@ -986,7 +1015,7 @@ function AppInterna() {
           </select>
           <button
             className="presup-add-btn"
-            onClick={() => { setNuevoNombre(''); setShowNuevoModal(true); }}
+            onClick={abrirNuevoPresupuesto}
             title="Nuevo presupuesto"
           >
             <Plus size={13} />
@@ -1282,6 +1311,7 @@ function AppInterna() {
 
         {/* Contenido */}
         <main className={`main-content vista-${vista.startsWith('grupo_') ? 'grupo' : vista}`}>
+          {vista !== 'plan' && <AvisoPlan suscripcion={suscripcion} soloLectura={soloLectura} onVer={() => setVista('plan')} />}
           {vista === 'mas' ? (
             <MasMovil
               nombre={nombre}
@@ -1301,7 +1331,7 @@ function AppInterna() {
                 setMonedaEdit({ moneda: monedasActivas.principal, moneda2: monedasActivas.secundaria });
                 setShowMonedaModal(true);
               }}
-              onNuevoPresupuesto={() => { setNuevoNombre(''); setShowNuevoModal(true); }}
+              onNuevoPresupuesto={abrirNuevoPresupuesto}
               onLogout={logout}
             />
           ) : vista === 'plantillas' ? (
@@ -1341,6 +1371,9 @@ function AppInterna() {
                       : key)
                   }
                 />
+              )}
+              {vista === 'plan' && (
+                <PlanPremium suscripcion={suscripcion} user={user} soloLectura={soloLectura} />
               )}
               {vista === 'carrito' && (
                 <Carrito
