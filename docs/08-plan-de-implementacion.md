@@ -2,6 +2,8 @@
 
 Plan por fases, cada una entregable y verificable. Las tareas son *checklists* para que una sesión nueva pueda retomar exactamente donde quedó: marcar `[x]` al completar y commitear este archivo.
 
+> **Estado (octubre 2026):** este plan describe la app **nativa con Expo**. La app móvil que existe hoy es la web con Capacitor y un diseño de celular ([04 ADR-007](./04-arquitectura.md#adr-007--capacitor-como-app-móvil-actual)); ya cubre casi todo el alcance funcional, así que las fases de pantallas sirven como lista de verificación de paridad. Cambios respecto al plan: la IA ya pasa por el Worker (Fase 6: el punto "decidir modo de IA" está resuelto, ver [05](./05-ia.md)); cada presupuesto tiene monedas principal/secundaria (usar `moneda.js` como referencia para `core`); hay "Cómo va el mes", carrito general, categorías nuevas/eliminables, tasas y ajustes a favor en tarjetas, y descuento del ahorro desde débito ([10](./10-cambios-recientes.md)). Un `core/` en TypeScript debe incluir estas reglas.
+
 **Definición de terminado (para toda tarea):** compila sin warnings, tests en verde, probado en un dispositivo Android real o emulador, sin `undefined` escritos en la base, textos en español rioplatense.
 
 ---
@@ -76,7 +78,7 @@ Portar a TypeScript puro las reglas de [02](./02-dominio-y-reglas.md). Cada func
 
 ## Fase 6 — Comprobantes con IA
 
-- [ ] Decidir modo de IA: clave por usuario (config) o Cloud Function (ADR-004). Si es función: crearla (`functions/`), secreto `GROQ_API_KEY`, verificación de token y límite diario.
+- [x] Modo de IA decidido e implementado: Worker de Cloudflare (`ia-worker/`, ADR-004) con secreto `GROQ_API_KEY`, verificación de token y límite por minuto. El cliente móvil solo llama a ese Worker con el ID token.
 - [ ] `ai/cliente.ts`: llamada común, reintentos, parseo tolerante ([05 §1](./05-ia.md#1-llamada-común)).
 - [ ] Captura: `expo-image-picker` (cámara/galería), `expo-image-manipulator` (2000 px, JPEG 0,85, base64).
 - [ ] `ai/tickets.ts`: lectura ([05 §2](./05-ia.md#2-lectura-de-tickets)) y sugerencias ([05 §3](./05-ia.md#3-sugerencia-de-coincidencias)).

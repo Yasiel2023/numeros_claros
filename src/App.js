@@ -12,6 +12,7 @@ import Ingresos from './components/Ingresos';
 import GrupoGastos, { aplicarPagoTarjeta, periodosDelMes, esPeriodo, pagarEnPeriodos } from './components/GrupoGastos';
 import Semanas from './components/Semanas';
 import CajaAhorro from './components/CajaAhorro';
+import Carrito from './components/Carrito';
 import Resumen from './components/Resumen';
 import { calcularSemanasMes, MESES_ES, getPeriodosLabel } from './constants';
 import { aplicarCuotas, cuotasPendientes, tarjetasParaMesNuevo } from './financiaciones';
@@ -33,7 +34,7 @@ import Comprobantes from './components/Comprobantes';
 import SelectorMonedas from './components/SelectorMonedas';
 import NuevaCategoriaModal from './components/NuevaCategoriaModal';
 import { genId } from './components/OnboardingWizard';
-import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS } from './moneda';
+import { configurarMonedas, monedasDeMeta, MONEDA_DEFAULT, MONEDA2_DEFAULT, MONEDAS, esSecundaria } from './moneda';
 import Chat from './components/Chat';
 import './App.css';
 import './movil.css';
@@ -138,7 +139,8 @@ const nombreVisibleGrupo = (nombre) =>
 const NAV_SECCIONES = [
   { key: 'dashboard', label: 'Inicio',    icono: 'casa' },
   { key: 'gastos',    label: 'Gastos',    icono: 'gastos' },
-  { key: 'tarjetas',   label: 'Tarjetas',        icono: 'tarjeta' },
+  { key: 'carrito',   label: 'Carrito',   icono: 'carrito' },
+  { key: 'tarjetas',  label: 'Tarjetas',        icono: 'tarjeta' },
   { key: 'ingresos',  label: 'Ingresos',  icono: 'ingresos' },
   { key: 'comprobantes', label: 'Comprobantes',  icono: 'recibo' },
   { key: 'resumen',    label: 'Resumen',          icono: 'resumen' },
@@ -149,7 +151,7 @@ const NAV_SECCIONES = [
 ];
 
 // En el celular estas secciones se abren desde la pestaña "Más"
-const VISTAS_DE_MAS = ['ingresos', 'comprobantes', 'resumen', 'caja', 'chat', 'plantillas', 'config'];
+const VISTAS_DE_MAS = ['carrito', 'ingresos', 'comprobantes', 'resumen', 'caja', 'chat', 'plantillas', 'config'];
 
 // ── App interna (usuario autenticado) ─────────────────────────
 function AppInterna() {
@@ -657,6 +659,23 @@ function AppInterna() {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => autoGuardar(newData), 1200);
   }, [autoGuardar]);
+
+  // ── Ahorro descontado de una cuenta de débito (Caja de ahorro) ─────────────
+  // Baja el saldo de la tarjeta del mes abierto con un movimiento automático y devuelve su id
+  // para guardarlo en el movimiento de la caja (así se puede revertir al borrarlo).
+  const descontarAhorroDeDebito = (tarjetaId, monto, concepto) => {
+    const res = aplicarPagoTarjeta(mesData.tarjetas, tarjetaId, monto, concepto);
+    updateMesData({ ...mesData, tarjetas: res.tarjetas });
+    return res.movId;
+  };
+  const revertirDescuentoDeDebito = (tarjetaId, movId) => {
+    updateMesData({
+      ...mesData,
+      tarjetas: (mesData.tarjetas || []).map(t => t.id === tarjetaId
+        ? { ...t, saldos: (t.saldos || []).filter(s => s.id !== movId) }
+        : t),
+    });
+  };
 
   // ── Aplicar comprobante: cada item puede ir a una categoría distinta ─────────
   // asignaciones: [{tipo: 'matchear'|'crear', grupoId, periodoNumero, itemName, nombre, monto}]
@@ -1276,6 +1295,10 @@ function AppInterna() {
                 onChange={updateCajaData}
                 ahorroRealMes={mesData?.objetivoAhorro || 0}
                 mesLabel={`${MESES_ES[mes]} ${año}`}
+                mesKey={mesKey}
+                tarjetasDebito={(mesData?.tarjetas || []).filter(t => t.tipo === 'debito' && !esSecundaria(t.moneda))}
+                onDescontar={descontarAhorroDeDebito}
+                onRevertir={revertirDescuentoDeDebito}
               />
             </div>
           ) : loading || nuevoMesPendiente ? (
@@ -1298,6 +1321,14 @@ function AppInterna() {
                       ? `grupo_${key}`
                       : key)
                   }
+                />
+              )}
+              {vista === 'carrito' && (
+                <Carrito
+                  gastos={mesData?.gastos || {}}
+                  grupos={grupos}
+                  onChange={gastos => updateMesData({ ...mesData, gastos })}
+                  onTicket={groqApiKey ? () => setShowFotoModal(true) : null}
                 />
               )}
               {vista === 'ingresos' && (

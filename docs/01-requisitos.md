@@ -29,6 +29,9 @@ Convenciones:
 | RF-PRES-4 | M | El usuario puede crear un presupuesto nuevo con nombre y, opcionalmente, una plantilla global como base (`_defaults`). Se escriben, en este orden: `_meta`, `_defaults`, `accesos`. |
 | RF-PRES-5 | M | Si el usuario no tiene presupuestos propios ni compartidos, se muestra el **onboarding** (RF-ONB). |
 | RF-PRES-6 | M | Las categorías visibles y su orden salen de `_defaults.grupos_gastos` del presupuesto activo. |
+| RF-PRES-8 | M | Cada presupuesto tiene **moneda principal** y, opcionalmente, **secundaria** (`_meta.moneda`, `_meta.moneda2`), elegidas al crearlo. El dueño puede cambiarlas; no se convierten montos, solo se reasigna el código de moneda de tarjetas (todos los meses) y cuotas a la principal o la secundaria. Presupuestos viejos sin esos campos se leen como UYU + USD. Monedas soportadas: UYU, ARS, CLP, MXN, COP, PEN, BRL, PYG, BOB, USD, EUR. |
+| RF-PRES-9 | M | **Nueva categoría en cualquier momento**: nombre (único, sin distinguir mayúsculas), ícono y frecuencia. Se agrega a `_defaults.grupos_gastos` (aparece en todos los meses y en los nuevos) y, si el mes existe, se le crean sus períodos vacíos. Queda abierta al crearla. |
+| RF-PRES-10 | M | **Eliminar categoría** (solo dueño, con confirmación): sale de `_defaults.grupos_gastos`, deja de aparecer y de sumarse en todos los meses; del mes actual se borran sus datos; los meses anteriores conservan lo guardado como historial. |
 | RF-PRES-7 | S | Renombres solo de pantalla: una tabla `NOMBRES_VISIBLES` (comparación sin mayúsculas ni espacios) cambia el nombre mostrado de una categoría sin tocar la base. Hoy: `compras → Supermercado`. Lo que se **escribe** en la base (por ejemplo al guardar plantillas) usa siempre el nombre original. |
 
 ## 3. Onboarding (ONB)
@@ -38,7 +41,9 @@ Convenciones:
 | RF-ONB-1 | M | Wizard de 3 pasos: (1) grupos de gastos con ícono, nombre y frecuencia; (2) items con monto previsto por grupo; (3) nombre del presupuesto y confirmación. |
 | RF-ONB-2 | M | Precarga los grupos desde `defaults/general` si existe. |
 | RF-ONB-3 | M | Al confirmar crea el presupuesto (`_meta`, `_defaults`, `accesos` con `rol: 'owner'`) y lo deja activo. |
-| RF-ONB-4 | S | Al confirmar también sobrescribe `defaults/general` con los grupos elegidos (comportamiento actual de la web; ver deuda en [09](./09-operacion.md)). |
+| RF-ONB-4 | M | El onboarding **ya no** sobrescribe `defaults/general`: esa plantilla global solo la editan los administradores. |
+| RF-ONB-5 | S | Paso inicial opcional: usar la plantilla sugerida o **"Armalo con IA"** (texto libre y/o foto de la planilla; la IA propone grupos e items sin inventar montos, [05 §6](./05-ia.md#6-armar-un-presupuesto-con-ia)). Requiere IA activa. |
+| RF-ONB-6 | M | Se eligen la moneda principal y, opcionalmente, la secundaria (RF-PRES-8). |
 
 ## 4. Compartir presupuestos (COMP)
 
@@ -89,15 +94,21 @@ Convenciones:
 | RF-CARR-3 | M | Resumen: "En el carrito" (cantidad y $) y "Falta montar" (cantidad y $), sumando el monto pendiente de cada item. Encabezado de período: "🛒 montados/pendientes". |
 | RF-CARR-4 | M | "Vaciar carrito" quita `enCarrito` de todos los items de la categoría. |
 | RF-CARR-5 | M | Pagar un item (a mano o por ticket) le quita `enCarrito`. |
+| RF-CARR-7 | M | **Carrito general**: pantalla "Carrito" (menú en escritorio; Inicio y Más en celular) que reúne los items con `enCarrito` de **todas las categorías**, para una misma compra (ej. Supermercado + Aseo). Muestra cantidad, total y de cuántas categorías son, agrupados por categoría. |
+| RF-CARR-8 | M | Desde el carrito general se puede **sacar** un producto (tocarlo), **montar** cualquier pendiente de cualquier categoría (sección "Agregar al carrito", una lista plegable por categoría) y **vaciar** todo con confirmación (quita `enCarrito` de todas las categorías; los items quedan pendientes). |
+| RF-CARR-9 | M | "Pagar el carrito con el ticket" abre la carga de comprobante (si la IA está activa). La IA sugiere primero los items en el carrito de la categoría elegida ([05 §3](./05-ia.md#3-sugerencia-de-coincidencias)). El modo carrito por categoría (RF-CARR-1..5) sigue existiendo y usa la misma marca. |
 | RF-CARR-6 | M | La marca `enCarrito` se guarda en la base para que sobreviva a cierres de la app y la vean los demás miembros. |
 
 ## 9. Tarjetas (TARJ)
 
 | ID | Prioridad | Requisito |
 |----|-----------|-----------|
-| RF-TARJ-1 | M | Alta de tarjeta: nombre, tipo (crédito/débito), moneda (UYU/USD). |
+| RF-TARJ-1 | M | Alta de tarjeta: nombre, tipo (crédito/débito), moneda (la principal o la secundaria del presupuesto). |
 | RF-TARJ-2 | M | **Débito**: muestra saldo actual y variación contra el registro anterior; saldo inicial del mes editable; "Registrar saldo" (monto + nota) agrega al historial; historial con fecha, saldo, diferencia, etiqueta "auto" y borrar entrada. |
 | RF-TARJ-3 | M | **Crédito**: nombre editable; saldo a pagar; "Pagado X de Y" si hay pago parcial; detalle de la deuda: cuotas, gastos pagados con la tarjeta, otros cargos (agregar/eliminar), "Sin detallar" editable si `monto` supera la suma de las partes, pagos realizados, totales. |
+| RF-TARJ-10 | M | **Eliminar tarjeta** siempre pide confirmación dentro de la hoja ("¿Eliminar la tarjeta «X»?" con Cancelar / Eliminar), sin depender del diálogo nativo del navegador. |
+| RF-TARJ-8 | M | **Cargos editables y ajustes a favor**: los cargos propios de una tarjeta de crédito se pueden editar. Un **ajuste a favor** es un cargo con monto negativo (devolución, bonificación): se ingresa en positivo con el selector "Ajuste a favor (resta)" y se guarda negativo. Si los ajustes superan la deuda, el saldo queda negativo y se muestra "Saldo a favor". |
+| RF-TARJ-9 | M | **Tasa**: cada tarjeta de crédito en la moneda secundaria tiene un campo `tasa` (unidades de la moneda principal por 1 de la secundaria), editable en su detalle o desde "Cómo va el mes". Si hay tasa se muestra "≈ monto en moneda principal". |
 | RF-TARJ-4 | M | **Pagar tarjeta de crédito**: monto (por defecto el saldo; tope el saldo) y origen (efectivo/transferencia o una tarjeta de débito **de la misma moneda**, que recibe un movimiento automático). Acción rápida "Pagar todo". |
 | RF-TARJ-5 | M | **Deshacer pago** de una tarjeta de crédito revierte todos sus pagos y elimina los movimientos de débito que generaron. |
 | RF-TARJ-6 | M | Totales de crédito pendiente y pagado, separados por moneda. |
@@ -119,6 +130,7 @@ Convenciones:
 | RF-DASH-2 | M | Pagos pendientes: items no pagados con previsto > 0 y tarjetas de crédito con saldo > 0, ordenados por monto descendente; máximo 8 visibles con "+N más"; tocar uno lleva a su categoría. Estado vacío: "¡Todo al día!". |
 | RF-DASH-3 | M | Avance por categoría: real / previsto con barra (color: >100% rojo, >80% ámbar, si no verde azulado) y fila de tarjetas. |
 | RF-DASH-4 | M | Objetivo de ahorro: separado para ahorro, objetivo, faltan/superado, saldo libre; sin objetivo, acceso a fijarlo. |
+| RF-DASH-5 | M | **Cómo va el mes**: con la plata real. Filas: En débito (suma de `saldoActualDebito` de los débitos en moneda principal) − Gastos pendientes − Tarjetas de crédito (moneda principal) − Tarjetas de crédito en moneda secundaria convertidas con su tasa = **Después de pagar todo**; − Ahorro = **Libre para gastar** (rojo si es negativo). Las tarjetas secundarias sin tasa no se restan y se avisa "Poné la tasa para incluirla". Sin cuentas de débito se invita a agregarlas en Tarjetas. Cada fila lleva a su pantalla. Fórmulas en [02 §10.1](./02-dominio-y-reglas.md#101-cómo-va-el-mes). |
 
 ## 12. Resumen (RES)
 
@@ -136,12 +148,13 @@ Convenciones:
 | RF-CAJA-1 | M | Saldos UYU y USD calculados recorriendo los movimientos ([02 §9](./02-dominio-y-reglas.md#9-caja-de-ahorro)). |
 | RF-CAJA-2 | M | Movimientos: transferencia UYU→USD (monto UYU, tasa, fecha, descripción), depósito UYU, ajuste de saldo USD, ajuste de saldo UYU; historial con borrado. |
 | RF-CAJA-3 | S | Acceso rápido para transferir/depositar el ahorro del mes (precarga el objetivo de ahorro del mes). |
+| RF-CAJA-4 | M | **Descontar de una tarjeta**: al depositar o convertir se puede elegir una cuenta de débito del mes abierto (moneda principal) cuyo saldo baja en ese monto; el movimiento guarda la tarjeta y se revierte al eliminarlo (solo en el mes abierto). Ver [02 §9](./02-dominio-y-reglas.md#9-caja-de-ahorro). |
 
 ## 14. Comprobantes con IA (TICK)
 
 | ID | Prioridad | Requisito |
 |----|-----------|-----------|
-| RF-TICK-1 | M | Acción global "Cargar comprobante" (no atada a una categoría), visible si hay clave de IA configurada. |
+| RF-TICK-1 | M | Acción global "Cargar comprobante" (no atada a una categoría), visible si la IA está activa (`sistema/ia/activa === true`). |
 | RF-TICK-2 | M | Origen de la imagen: cámara nativa, galería o portapapeles. Antes de enviarla se reduce (lado mayor ≤ 2000 px, JPEG 0,85). |
 | RF-TICK-3 | M | La IA devuelve tienda, items (nombre, cantidad, precio unitario, total), `total_pagado` y observaciones ([05 §2](./05-ia.md#2-lectura-de-tickets)). Sin items: se muestra la observación y opción de volver. |
 | RF-TICK-4 | M | Cada item se asigna eligiendo **categoría**; si la categoría tiene más de un período aparece el selector de período (por defecto el período de hoy, [02 §4](./02-dominio-y-reglas.md#4-período-por-defecto-de-hoy)). Al elegir categoría/período la IA sugiere el gasto existente que coincide ([05 §3](./05-ia.md#3-sugerencia-de-coincidencias)); sin coincidencia queda "Crear nuevo". |
@@ -175,8 +188,8 @@ Convenciones:
 
 | ID | Prioridad | Requisito |
 |----|-----------|-----------|
-| RF-CONF-1 | M | Clave de Groq (validación: empieza con `gsk_`), URL (por defecto `https://api.groq.com/openai/v1`) y modelo de chat (por defecto `openai/gpt-oss-120b`). Guardar y eliminar. |
-| RF-CONF-2 | C | En la versión de tiendas, la clave no la carga el usuario: la IA pasa por un backend propio ([07 §3](./07-seguridad.md#3-claves-de-ia)). |
+| RF-CONF-1 | M | Solo **administradores** (`admins/{uid} === true`) ven Configuración. Editan `sistema/ia`: interruptor **activa**, URL de Groq (por defecto `https://api.groq.com/openai/v1`) y modelo de chat (por defecto `openai/gpt-oss-120b`). La clave de Groq **no** se guarda en la base: es un secreto del Worker (`wrangler secret put GROQ_API_KEY`). |
+| RF-CONF-2 | M | Los usuarios no cargan ninguna clave: toda llamada de IA pasa por el Worker, que verifica la sesión, aplica el límite por usuario y elige el modelo ([07 §3](./07-seguridad.md#3-claves-de-ia)). Si la IA está desactivada, las funciones de IA se ocultan y el Worker responde 503. |
 
 ---
 

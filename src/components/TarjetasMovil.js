@@ -106,6 +106,28 @@ function HojaPagarCredito({ tarjeta, debitos, onPagar, onClose }) {
   );
 }
 
+// Eliminar una tarjeta: siempre pide confirmación dentro de la hoja (no depende del
+// diálogo nativo del navegador, que en el celular puede no mostrarse).
+function BotonEliminarTarjeta({ nombre, onEliminar }) {
+  const [confirmando, setConfirmando] = useState(false);
+  if (!confirmando) {
+    return (
+      <button className="hoja-btn-peligro" aria-label="Eliminar tarjeta" onClick={() => setConfirmando(true)}>
+        <Trash2 size={18} />
+      </button>
+    );
+  }
+  return (
+    <div className="hoja-confirmar" role="alertdialog" aria-label="Confirmar eliminación">
+      <span>¿Eliminar la tarjeta «{nombre}»?</span>
+      <div>
+        <button className="hoja-btn hoja-btn-sec" onClick={() => setConfirmando(false)}>Cancelar</button>
+        <button className="hoja-btn hoja-btn-rojo" onClick={onEliminar}>Eliminar</button>
+      </div>
+    </div>
+  );
+}
+
 function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago, onEliminar, onClose }) {
   const [concepto, setConcepto] = useState('');
   const [montoCargo, setMontoCargo] = useState('');
@@ -240,10 +262,7 @@ function HojaDetalleCredito({ tarjeta, gastos, debitos, onUpdate, onDeshacerPago
       </div>
 
       <div className="hoja-acciones">
-        <button className="hoja-btn-peligro" aria-label="Eliminar tarjeta"
-          onClick={() => window.confirm(`¿Eliminar la tarjeta "${tarjeta.nombre}"?`) && onEliminar()}>
-          <Trash2 size={18} />
-        </button>
+        <BotonEliminarTarjeta nombre={tarjeta.nombre} onEliminar={onEliminar} />
         {pagado > 0 && (
           <button className="hoja-btn hoja-btn-sec" onClick={() => window.confirm('¿Deshacer los pagos de esta tarjeta?') && onDeshacerPago()}>
             <Undo2 size={16} /> Deshacer pagos
@@ -314,10 +333,7 @@ function HojaDebito({ tarjeta, onUpdate, onEliminar, onClose }) {
       </div>
 
       <div className="hoja-acciones">
-        <button className="hoja-btn-peligro" aria-label="Eliminar tarjeta"
-          onClick={() => window.confirm(`¿Eliminar la tarjeta "${tarjeta.nombre}"?`) && onEliminar()}>
-          <Trash2 size={18} />
-        </button>
+        <BotonEliminarTarjeta nombre={tarjeta.nombre} onEliminar={onEliminar} />
         <button className="hoja-btn" onClick={onClose}>Listo</button>
       </div>
     </Hoja>

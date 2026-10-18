@@ -97,8 +97,9 @@ Item { nombre; previsto; real?; pagado: boolean; enCarrito?: true;
 ### 6.1 Crédito
 
 ```ts
-TarjetaCredito { id; nombre; moneda: 'UYU'|'USD'; tipo: 'credito';
-  monto;            // deuda total del mes = cuotas + gastos cargados + cargos + sin detallar
+TarjetaCredito { id; nombre; moneda: string /* código: la principal o la secundaria del presupuesto */; tipo: 'credito';
+  tasa?: number;    // solo moneda secundaria: unidades de la moneda principal por 1 de la secundaria
+  monto;            // deuda total del mes = cuotas + gastos cargados + cargos (con ajustes negativos) + sin detallar
   montoPagado?;     // permite pago parcial
   pagado: boolean;  // true cuando montoPagado ≥ monto y monto > 0
   cuotas?: [{ finId, concepto, numero, total, monto }];
@@ -107,9 +108,11 @@ TarjetaCredito { id; nombre; moneda: 'UYU'|'USD'; tipo: 'credito';
 ```
 
 - `pagadoTarjeta(t) = t.montoPagado !== undefined ? t.montoPagado : (t.pagado ? t.monto : 0)` (compatibilidad con tarjetas viejas sin `montoPagado`).
-- `saldoTarjeta(t) = max(0, monto − pagadoTarjeta(t))`.
+- `saldoTarjeta(t) = monto − pagadoTarjeta(t)`. **Puede ser negativo**: con ajustes a favor la tarjeta queda con *saldo a favor* (antes se recortaba en 0).
 - **Sin detallar** = `monto − Σcuotas − Σ(montoCargado de gastos de la tarjeta) − Σcargos`. Si ≠ 0 se muestra y es editable: editar fija `monto = Σpartes + valor`.
-- **Agregar cargo**: agrega a `cargos` y suma a `monto`. **Eliminar cargo**: lo quita y resta (mínimo 0).
+- **Agregar cargo**: agrega a `cargos` y suma a `monto`. **Editar cargo**: reemplaza concepto y monto y ajusta `monto` por la diferencia. **Eliminar cargo**: lo quita y resta su monto.
+- **Ajuste a favor**: es un cargo con `monto < 0` (devolución, bonificación). La interfaz lo pide en positivo y lo guarda negativo; baja la deuda y se muestra como "ajuste" (los positivos, como "cargo").
+- **Tasa** (`tasa`): solo tiene sentido en tarjetas de crédito en la moneda secundaria. Equivalente en moneda principal = `saldo · tasa`.
 - **Pagar** `m` (tope = saldo): agrega `pago { id, monto, fecha }`; `montoPagado += m`; `pagado = montoPagado ≥ monto && monto > 0`. Si se paga desde un débito de la **misma moneda**, ese débito recibe un movimiento automático `{ id: movId, ts, fecha, monto: saldoActual − m, nota: "Pago {nombreTarjeta}", auto: true }` y el pago guarda `debitoId` y `movId`.
 - **Deshacer pagos**: elimina de cada débito los movimientos `movId` de los pagos, y quita `montoPagado` y `pagos` de la tarjeta; `pagado = false`.
 
@@ -155,7 +158,7 @@ Al crear un mes (o al pulsar "Traer tarjetas" en un mes sin tarjetas):
 - `idsCredito = ids de tarjetas con tipo ≠ 'debito'`.
 - `cuentaComoGastoReal(item) = item.pagado === true && !(item.tarjetaId ∈ idsCredito)`.
 - `montoCargado(item) = item.tarjetaMonto ?? item.real`.
-- `previstoPropioTarjeta(t) = max(0, t.monto − Σ montoCargado(items pagados con t))` — lo que la tarjeta aporta al presupuesto **sin duplicar** gastos ya previstos en su categoría (cuotas + cargos propios).
+- `previstoPropioTarjeta(t) = t.monto − Σ montoCargado(items pagados con t)` — lo que la tarjeta aporta al presupuesto **sin duplicar** gastos ya previstos en su categoría (cuotas + cargos propios). **Puede ser negativo** si los ajustes a favor superan cuotas y cargos.
 
 ## 7. Compras en cuotas (financiaciones)
 
@@ -235,7 +238,9 @@ Movimientos (en orden de inserción) con `id`, `fecha`, `descripcion` y por tipo
 | `ajuste_usd` / `ajuste` (legado) | `saldoUSD` | saldo USD **=** saldoUSD |
 | `ajuste_uyu` | `saldoUYU` | saldo UYU **=** saldoUYU |
 
-Los saldos se recalculan recorriendo todos los movimientos; no hay saldo persistido.
+Los saldos se recalculan recorriendo todos los movimientos; no hay saldo persistido. Los campos `*UYU` son de la moneda **principal** del presupuesto y los `*USD`, de la **secundaria**.
+
+**Descontar el ahorro de una tarjeta de débito.** Al registrar un `deposito_uyu` o una `transferencia` se puede elegir una cuenta de débito del mes abierto (solo en moneda principal). Se hace igual que un pago con débito (§6.4): la tarjeta recibe un movimiento `{ id: movId, ts, fecha, monto: saldoActual − montoUYU, nota: "Pago: {descripción}", auto: true }` y el movimiento de la caja guarda `tarjetaId`, `tarjetaMovId` y `mesKey` (`AAAA_M` del mes en que se descontó). Al **eliminar** el movimiento de la caja, si `mesKey` es el mes abierto se quita esa entrada de `saldos` de la tarjeta (devuelve el saldo); si es de otro mes no se toca ninguna tarjeta. Como los saldos de débito son absolutos, el movimiento de la caja y el de la tarjeta se guardan por separado (caja a nivel presupuesto, tarjeta dentro del mes).
 
 ## 10. Fórmulas de totales del mes (Dashboard, Resumen y herramientas de IA)
 
@@ -261,9 +266,27 @@ Sea `G` el conjunto de categorías del presupuesto, `items(g)` todos los items d
 
 > El objetivo de ahorro se trata como un **gasto fijo del mes** en los totales.
 
+### 10.1 Cómo va el mes
+
+Panel de Inicio (`calcularComoVa` en `Dashboard.js`) que responde "¿cuánta plata me queda de verdad?". Solo usa la plata registrada en cuentas de débito, no los ingresos.
+
+Sea `D` = tarjetas de débito en la moneda principal, `Cr` = tarjetas de crédito, `Cr₂` = las de crédito en la moneda secundaria, `montoDe(i) = i.real ?? i.previsto`.
+
+| Magnitud | Fórmula |
+|----------|---------|
+| En débito | `Σ_{t∈D} saldoActualDebito(t)` |
+| Gastos pendientes | `Σ montoDe(i)` de los items con `pagado ≠ true` y `previsto > 0` de todas las categorías |
+| Tarjetas de crédito (principal) | `Σ saldoTarjeta(t)` de las de moneda principal |
+| Tarjetas de crédito (secundaria) | `Σ saldoTarjeta(t) · t.tasa` de las de moneda secundaria **con tasa > 0**; las que no tienen tasa (y saldo ≠ 0) quedan en `sinTasa` y no se restan |
+| **Después de pagar todo** | `enDebito − pendientes − tarjetas(principal) − tarjetas(secundaria convertidas)` |
+| **Libre para gastar** | `despuésDePagar − objetivoAhorro` |
+
+Sin doble conteo: pagar con débito baja el saldo y saca el gasto de pendientes; pagar con crédito lo pasa a la deuda de la tarjeta; pagar la tarjeta desde el débito baja ambos. Las cuentas de débito en la moneda secundaria no se suman.
+
 ## 11. Formatos de presentación
 
-- UYU: `Intl.NumberFormat('es-UY', { maximumFractionDigits: 0, useGrouping: false })` → `$1607`.
-- USD: `Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })`.
+- Todo se formatea desde `src/moneda.js`: `Intl.NumberFormat('es-UY', { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: false })` con `d` = decimales de la moneda, precedido de su símbolo. Ej.: UYU → `$1607`; USD → `US$1607,50`.
+- Tabla `MONEDAS` (símbolo / decimales): UYU `$`/0, ARS `$`/0, CLP `$`/0, MXN `$`/2, COP `$`/0, PEN `S/`/2, BRL `R$`/2, PYG `₲`/0, BOB `Bs`/2, USD `US$`/2, EUR `€`/2.
+- `money(n)` usa la moneda principal; `moneyDe(n, codigo)` otra moneda. Una tarjeta o cuota es "secundaria" solo si su código coincide exactamente con la secundaria del presupuesto.
 - Fechas de movimientos: `DD/MM HH:mm`. Fechas de registros: ISO 8601.
 - IDs generados en cliente: `slug(nombre) + '_' + Date.now().toString(36)` o prefijos (`tj_`, `cg_`, `pg_`, `mov_`, `fin_`, `cp_`).

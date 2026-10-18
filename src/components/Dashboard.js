@@ -178,8 +178,6 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [], onTi
   const [pagando, setPagando] = useState(null); // pendiente que se está pagando desde Inicio
   if (!mesData) return <div className="loading-state">Cargando...</div>;
 
-  // Acceso rápido "Carrito": la primera categoría semanal (normalmente Supermercado)
-  const grupoCarrito = grupos.find(g => g.frecuencia === 'semanal' || g.tipo === 'semanas');
 
   const { ingresos = [], gastos = {}, tarjetas = [], objetivoAhorro = 0 } = mesData;
 
@@ -254,11 +252,9 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [], onTi
                 <button onClick={onTicket}><span><Icono nombre="camara" size={22} /></span>Ticket</button>
               )}
               <button onClick={() => onIrA('gastos')}><span><Icono nombre="pagar" size={22} /></span>Pagar</button>
-              {grupoCarrito && (
-                <button onClick={() => onIrA(`grupo_${grupoCarrito.id}`)}>
-                  <span className="violeta"><Icono nombre="carrito" size={22} /></span>Carrito
-                </button>
-              )}
+              <button onClick={() => onIrA('carrito')}>
+                <span className="violeta"><Icono nombre="carrito" size={22} /></span>Carrito
+              </button>
               <button onClick={() => onIrA('chat')}><span><Icono nombre="chat" size={22} /></span>Preguntar</button>
             </div>
 
@@ -387,8 +383,8 @@ export default function Dashboard({ mesData, mes, año, onIrA, grupos = [], onTi
                 </button>
               ))}
             </div>
-            {carritoTotal.cantidad > 0 && grupoCarrito && (
-              <button className="dw-carrito" onClick={() => onIrA(`grupo_${grupoCarrito.id}`)}>
+            {carritoTotal.cantidad > 0 && (
+              <button className="dw-carrito" onClick={() => onIrA('carrito')}>
                 <Icono nombre="carrito" size={18} />
                 {carritoTotal.cantidad} producto{carritoTotal.cantidad !== 1 ? 's' : ''} en el carrito · {money(carritoTotal.monto)}
               </button>

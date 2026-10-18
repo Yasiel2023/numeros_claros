@@ -9,26 +9,48 @@
 │     mesData, defaults, tarjetas, caja, financiaciones, vista │
 │  components/* ── pantallas (props hacia abajo)              │
 │  Dominio: tarjetas.js · financiaciones.js · constants.js    │
-│  IA: ia.js (tickets) · iaChat.js (chat con herramientas)    │
+│  IA: ia.js (tickets) · iaChat.js (chat) · iaCliente.js      │
+│  Diseño: useEsMovil (≤ 900 px) elige la UI de celular o web │
 │  PWA: manifest.json + service-worker.js                     │
+│  Android: Capacitor 8 envuelve build/ (android/)            │
 └───────┬───────────────────────────┬─────────────────────────┘
-        │ Firebase JS SDK 10        │ fetch (Bearer clave del usuario)
+        │ Firebase JS SDK 10        │ fetch (Bearer = ID token de Firebase)
         ▼                           ▼
- Firebase Auth + Realtime DB    Groq API (OpenAI-compatible)
- Firebase Hosting (SPA)         · visión: qwen/qwen3.8-27b
-                                · chat: openai/gpt-oss-120b (configurable)
+ Firebase Auth + Realtime DB    Worker de Cloudflare (ia-worker/)
+ Firebase Hosting (SPA)           · verifica token, límite por usuario, clave de Groq
+                                  ▼
+                                Groq API (OpenAI-compatible)
+                                · visión: qwen/qwen3.8-27b
+                                · chat: sistema/ia/groq_model (por defecto openai/gpt-oss-120b)
 ```
 
 | Pieza | Detalle |
 |-------|---------|
-| UI | React 18, `react-scripts` 5, `lucide-react` (íconos), `recharts` (Resumen), Chart.js 3.9.1 por CDN (gráficos del chat). Un único `App.css`. |
-| Navegación | Estado `vista` en `App.js` (`dashboard`, `ingresos`, `grupo_{id}`, `tarjetas`, `comprobantes`, `resumen`, `caja`, `chat`, `plantillas`, `config`). Sidebar con menú dinámico (un ítem por categoría). |
+| UI | React 18, `react-scripts` 5, `lucide-react` (íconos), `recharts` (Resumen), Chart.js 3.9.1 por CDN (gráficos del chat). Estilos en `App.css` (base), `movil.css` (diseño de celular) y `web.css` (escritorio). Íconos propios del prototipo en `iconos.js`. |
+| Diseño responsive | `useEsMovil()` (`matchMedia('(max-width: 900px)')`) decide entre componentes de celular y de escritorio: `GrupoGastosMovil`/`GrupoGastosWeb` (el contenedor `GrupoGastos` conserva la lógica), `TarjetasMovil` (`Tarjetas` delega), `GastosLista`/`GastosWeb`, `MasMovil`. En celular hay barra de pestañas (Inicio · Gastos · cámara · Tarjetas · Más). |
+| Navegación | Estado `vista` en `App.js` (`dashboard`, `gastos`, `grupo_{id}`, `carrito`, `tarjetas`, `ingresos`, `comprobantes`, `resumen`, `caja`, `chat`, `plantillas`, `config`, `mas`). En escritorio: sidebar fijo y la pantalla Gastos lista las categorías con el detalle de la elegida. En celular: pestañas y pestaña "Más" (`VISTAS_DE_MAS`). |
 | Estado | Todo en `AppInterna`; autoguardado con debounce de 1200 ms (`updateMesData` → `set`). |
 | Dominio | `src/tarjetas.js` (crédito/débito, gasto real), `src/financiaciones.js` (cuotas, arrastre), `src/constants.js` (meses, frecuencias, semanas), `GrupoGastos.js` (exporta `toPeriodos`, `aplicarPagoTarjeta`, `tarjetasDisponibles`, `saldoActualDebito`). |
-| IA | `src/ia.js`: lectura de tickets y sugerencias (Groq, reintentos, achicado de imagen). `src/iaChat.js`: contexto, herramientas y ciclo de *tool calling*. |
+| IA | `src/iaCliente.js`: único punto de salida (`llamarIA({ tipo, ...pedido })` → Worker). `src/ia.js`: tickets, sugerencias y armado de presupuesto (achicado de imagen). `src/iaChat.js`: contexto, herramientas y ciclo de *tool calling*. URL del Worker: `REACT_APP_IA_URL` o el valor por defecto. |
+| Monedas | `src/moneda.js`: monedas del presupuesto activo (`configurarMonedas` al cambiar de presupuesto) y formato de montos. |
 | Hosting | Firebase Hosting, carpeta `build/`, rewrite `** → /index.html`, sin caché para `index.html`, `manifest.json` y `service-worker.js`. |
 
-## 2. Arquitectura objetivo (app móvil)
+### 1.1 Worker de IA (`ia-worker/`)
+
+Cloudflare Worker (`numeros-claros-ia`, `wrangler.toml`) que reemplaza la llamada directa a Groq. Por cada `POST`:
+
+1. Verifica el ID token de Firebase (`jose`, JWKS de Google; issuer/audience `numeros-claros`) → `401` si falta o venció.
+2. Exige el encabezado `X-IA-Tipo` = `vision` | `chat` y un cuerpo ≤ 6 MB.
+3. Lee `sistema/ia` y `admins/{uid}` de RTDB con el token del usuario; si `activa !== true` → `503`.
+4. Límite por usuario: binding `LIMITADOR` (Rate Limiting de Cloudflare, 20 pedidos por minuto); los admins no tienen límite → `429`.
+5. Antepone el modelo al JSON sin parsearlo (`vision` → `qwen/qwen3.8-27b`; `chat` → `sistema/ia/groq_model` o `openai/gpt-oss-120b`) y reenvía a `{groq_url}/chat/completions` con el secreto `GROQ_API_KEY`.
+6. Reintenta ante 429/500/503 con esperas de 1,5 s, 4 s y 8 s; si sigue saturado devuelve `503` con mensaje legible. La respuesta de Groq se devuelve tal cual.
+
+CORS: solo `https://numeros-claros.web.app`, `https://numeros-claros.firebaseapp.com`, `https://localhost` (app Android) y `http://localhost:3000`. Pendiente (TODO en el código): verificar suscripción premium antes del límite.
+
+## 2. Arquitectura objetivo (app móvil nativa)
+
+> Estado: hoy la app móvil es la web con Capacitor (ADR-007). Esta sección describe el objetivo a futuro (Expo).
 
 ### 2.1 Decisión de plataforma
 
@@ -47,7 +69,7 @@
 └──────┬─────────────────────────────┬────────────────────────────────────────┘
        │ Firebase JS SDK             │ HTTPS
        ▼                             ▼
- Firebase Auth + RTDB          Cloud Function "ia" (recomendado, ADR-004)
+ Firebase Auth + RTDB          Worker de Cloudflare "ia" (ADR-004)
  (mismos datos que la web)        └── Groq API (clave como secreto del servidor)
 ```
 
@@ -100,10 +122,17 @@ features (UI) ──► state ──► data ──► core
 ### ADR-003 — Las cuentas las hace el código
 - **Decisión:** la IA clasifica e interpreta; los montos los calcula `core`. Las herramientas del chat devuelven totales ya calculados.
 
-### ADR-004 — IA detrás de una Cloud Function
-- **Contexto:** hoy cada usuario guarda su clave de Groq en `config/{uid}` y el cliente llama a Groq directo. En una app de tienda eso obliga a cada usuario a tener clave y expone el patrón.
-- **Decisión recomendada:** Cloud Function HTTPS/callable `ia` con la clave en Secret Manager; valida `auth`, aplica límites por usuario y reenvía a Groq. Las herramientas del chat se pueden ejecutar en el cliente (con la sesión del usuario, protegidas por reglas) o en la función con Admin SDK **verificando acceso** al presupuesto.
-- **Costo:** requiere plan Blaze. Alternativa v1: mantener la clave por usuario (comportamiento actual) detrás de un flag.
+### ADR-004 — IA detrás de un proxy (implementado con Cloudflare Workers)
+- **Contexto:** antes cada usuario guardaba su clave de Groq en `config/{uid}` y el cliente llamaba a Groq directo. En una app de tienda eso obliga a cada usuario a tener clave y expone el patrón.
+- **Decisión (implementada):** Worker de Cloudflare `ia-worker/` (§1.1) con la clave como secreto; valida la sesión, aplica límite por usuario y reenvía a Groq. Las herramientas del chat se ejecutan en el cliente (con la sesión del usuario, protegidas por las reglas de RTDB), así que el Worker no necesita Admin SDK.
+- **Por qué Cloudflare y no Cloud Functions:** evita el plan Blaze de Firebase; el plan gratuito de Workers alcanza (de ahí que el Worker no parsee el cuerpo, por el límite de CPU).
+- **Pendiente:** premium/suscripciones (TODO en el Worker).
+
+### ADR-007 — Capacitor como app móvil actual
+- **Contexto:** se necesitaba una app instalable ya, sin reescribir la UI.
+- **Decisión:** empaquetar `build/` con Capacitor 8 (`capacitor.config.json`, id `uy.numerosclaros.app`, `webDir: build`; permisos `INTERNET` y `CAMERA`) y dar a la web un diseño de celular (≤ 900 px) con barra de pestañas, hojas inferiores e íconos del prototipo.
+- **Flujo:** `npm run android:sync` (build + `cap sync android`) y `npm run android:open` (Android Studio).
+- **Consecuencia:** una sola base de código para web y Android. Prima sobre ADR-001 en el corto plazo; la app Expo sigue siendo opción a futuro.
 
 ### ADR-005 — Escritura del mes completo
 - **Decisión v1:** igual que la web (simplicidad y compatibilidad). Riesgo: dos personas editando el mismo mes a la vez pueden pisarse. Mitigación v1: suscripción en vivo. Mejora futura: `update()` por ruta.

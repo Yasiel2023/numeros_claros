@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { money, moneyDe, monedaPrincipal, monedaSecundaria } from '../moneda';
 import { Plus, Trash2, PiggyBank, DollarSign, RefreshCw, ArrowRightLeft } from 'lucide-react';
 import Icono from '../iconos';
+import { saldoActualDebito } from './GrupoGastos';
 
 const fmtDate = (iso) => {
   if (!iso) return '';
@@ -17,7 +18,13 @@ const fmtDate = (iso) => {
 //   'ajuste_usd'     — ajuste manual saldo USD
 //   'ajuste_uyu'     — ajuste manual saldo UYU
 
-export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesLabel = '' }) {
+// tarjetasDebito: cuentas de débito del mes abierto en la moneda principal (de ahí se puede
+// descontar el ahorro). onDescontar(tarjetaId, monto, concepto) baja su saldo y devuelve el id
+// del movimiento; onRevertir(tarjetaId, movId) lo quita. mesKey: mes al que pertenece ese movimiento.
+export default function CajaAhorro({
+  cajaData, onChange, ahorroRealMes = 0, mesLabel = '',
+  tarjetasDebito = [], onDescontar, onRevertir, mesKey = '',
+}) {
   // Campos *UYU = moneda principal del presupuesto; *USD = moneda secundaria
   const P = monedaPrincipal();
   const S = monedaSecundaria();   // '' si el presupuesto no tiene segunda moneda
@@ -70,6 +77,32 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
   const [ajusteUYU, setAjusteUYU]   = useState('');
   const [ajusteUYUDesc, setAjusteUYUDesc] = useState('');
 
+  // Tarjeta de débito de la que se descuenta el ahorro ('' = no se descuenta de ninguna)
+  const [depTarjeta, setDepTarjeta]     = useState('');
+  const [transfTarjeta, setTransfTarjeta] = useState('');
+  const puedeDescontar = tarjetasDebito.length > 0 && !!onDescontar;
+
+  // Descuenta de la tarjeta (si se eligió) y devuelve los campos que se guardan en el movimiento
+  const descontar = (tarjetaId, monto, concepto) => {
+    if (!tarjetaId || !onDescontar) return {};
+    const movId = onDescontar(tarjetaId, monto, concepto);
+    return { tarjetaId, tarjetaMovId: movId, mesKey };
+  };
+
+  const SelectorTarjeta = ({ valor, onChange: cambiar, monto }) => !puedeDescontar ? null : (
+    // Se llama como función (no como componente) para que el <select> no se remonte al escribir
+    <div className="caja-form-field">
+      <label>Descontar de</label>
+      <select className="cell-input" value={valor} onChange={e => cambiar(e.target.value)}>
+        <option value="">No descontar de ninguna tarjeta</option>
+        {tarjetasDebito.map(t => (
+          <option key={t.id} value={t.id}>{t.nombre} · saldo {money(saldoActualDebito(t))}</option>
+        ))}
+      </select>
+      {valor && monto > 0 && <small className="caja-form-hint">Baja el saldo de la tarjeta en {money(monto)}.</small>}
+    </div>
+  );
+
   const openForm = (form, prefill = null) => {
     setActiveForm(f => f === form ? null : form);
     if (prefill && form === 'transf') { setTransfUYU(String(prefill)); }
@@ -81,13 +114,15 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
     const uyu = parseFloat(transfUYU) || 0;
     const tasa = parseFloat(transfTasa) || 0;
     if (!uyu || !tasa) return;
+    const descripcion = transfDesc || `Ahorro ${mesLabel}`;
     onChange({ ...data, movimientos: [...movs, {
       id: Date.now().toString(36), tipo: 'transferencia',
       fecha: transfFecha,
-      descripcion: transfDesc || `Ahorro ${mesLabel}`,
+      descripcion,
       montoUYU: uyu, tasa, montoUSD: uyu / tasa,
+      ...descontar(transfTarjeta, uyu, descripcion),
     }]});
-    setTransfUYU(''); setTransfTasa(''); setTransfDesc('');
+    setTransfUYU(''); setTransfTasa(''); setTransfDesc(''); setTransfTarjeta('');
     setTransfFecha(new Date().toISOString().slice(0, 10));
     setActiveForm(null);
   };
@@ -95,13 +130,15 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
   const agregarDepUYU = () => {
     const uyu = parseFloat(depUYU) || 0;
     if (!uyu) return;
+    const descripcion = depDesc || `Ahorro ${P} ${mesLabel}`;
     onChange({ ...data, movimientos: [...movs, {
       id: Date.now().toString(36), tipo: 'deposito_uyu',
       fecha: depFecha,
-      descripcion: depDesc || `Ahorro ${P} ${mesLabel}`,
+      descripcion,
       montoUYU: uyu,
+      ...descontar(depTarjeta, uyu, descripcion),
     }]});
-    setDepUYU(''); setDepDesc('');
+    setDepUYU(''); setDepDesc(''); setDepTarjeta('');
     setDepFecha(new Date().toISOString().slice(0, 10));
     setActiveForm(null);
   };
@@ -132,7 +169,15 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
     setActiveForm(null);
   };
 
-  const eliminar = (id) => onChange({ ...data, movimientos: movs.filter(m => m.id !== id) });
+  const eliminar = (id) => {
+    const m = movs.find(x => x.id === id);
+    // Si se había descontado de una tarjeta del mes abierto, se le devuelve el saldo.
+    // Los movimientos de otros meses no se tocan (esas tarjetas no están cargadas).
+    if (m?.tarjetaId && m.tarjetaMovId && m.mesKey === mesKey && onRevertir) {
+      onRevertir(m.tarjetaId, m.tarjetaMovId);
+    }
+    onChange({ ...data, movimientos: movs.filter(x => x.id !== id) });
+  };
 
   const transfUYUNum  = parseFloat(transfUYU) || 0;
   const transfTasaNum = parseFloat(transfTasa) || 0;
@@ -220,6 +265,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
               <input type="text" className="cell-input" placeholder={`Ahorro ${mesLabel}`}
                 value={depDesc} onChange={e => setDepDesc(e.target.value)} />
             </div>
+            {SelectorTarjeta({ valor: depTarjeta, onChange: setDepTarjeta, monto: parseFloat(depUYU) || 0 })}
           </div>
           <div className="caja-form-btns">
             <button className="btn-confirm-caja" onClick={agregarDepUYU} disabled={!parseFloat(depUYU)}>
@@ -261,6 +307,7 @@ export default function CajaAhorro({ cajaData, onChange, ahorroRealMes = 0, mesL
               <input type="text" className="cell-input" placeholder={`Ahorro ${mesLabel}`}
                 value={transfDesc} onChange={e => setTransfDesc(e.target.value)} />
             </div>
+            {SelectorTarjeta({ valor: transfTarjeta, onChange: setTransfTarjeta, monto: parseFloat(transfUYU) || 0 })}
           </div>
           {transfUYUNum > 0 && transfTasaNum > 0 && (
             <div className="caja-preview">

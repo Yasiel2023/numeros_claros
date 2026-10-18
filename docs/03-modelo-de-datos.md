@@ -8,7 +8,7 @@
 presupuestos/
   {ownerUid}/
     {presupuestoId}/
-      _meta              { nombre, creadoEn }
+      _meta              { nombre, creadoEn, moneda?, moneda2? }   ← moneda2 === '' = sin segunda moneda
       _defaults          { grupos_gastos: Grupo[], ingresos: IngresoBase[] }
       _caja_ahorro       { movimientos: MovimientoCaja[] }
       _financiaciones    Financiacion[]
@@ -27,7 +27,13 @@ email_uid/
   {emailCodificado}      uid                          ← '.' reemplazado por ','
 
 config/
-  {uid}/                 { groq_api_key?, groq_url?, groq_model?, gemini_api_key? }
+  {uid}/                 LEGADO: { groq_api_key?, groq_url?, groq_model?, gemini_api_key? }
+                         ← ya no se lee ni se escribe; la IA usa sistema/ia y el Worker
+
+sistema/
+  ia                     { activa: boolean, groq_url?, groq_model?, actualizado: ISO }
+                         ← lectura: cualquier usuario con sesión; escritura: solo admins.
+                           NO contiene la clave de Groq (es un secreto del Worker)
 
 user_templates/
   {uid}/{templateId}     PlantillaMes
@@ -36,19 +42,25 @@ defaults/
   {templateId}           PlantillaPresupuesto         ← "general" es la semilla del onboarding
 
 admins/
-  {uid}                  true                         ← solo cambia un aviso en Configuración
+  {uid}                  true                         ← solo lectura desde la app (`.write: false`);
+                           se asigna a mano en la consola de Firebase. Habilita Configuración,
+                           escribir `sistema/*` y `defaults/*`, y no tiene límite de uso de IA
 ```
 
 ## 2. Esquemas (TypeScript de referencia)
 
 ```ts
-type Moneda = 'UYU' | 'USD';
+// Código de moneda de la tabla MONEDAS (src/moneda.js): UYU, ARS, CLP, MXN, COP, PEN, BRL, PYG, BOB, USD, EUR.
+// Cada presupuesto tiene una principal (_meta.moneda, por defecto UYU) y una secundaria
+// opcional (_meta.moneda2, por defecto USD en presupuestos viejos; '' = ninguna).
+type Moneda = string;
 type Frecuencia = 'mensual' | 'quincenal' | 'cada10dias' | 'semanal';
 
 interface Grupo {                // _defaults.grupos_gastos[], plantillas
   id: string;                    // slug + sufijo, ej "compras" o "supermercado_k3f9"
   nombre: string;
-  icono?: string;                // emoji
+  icono?: string;                // clave de src/iconos.js (ej. "carrito", "casa", "auto", "salud"); datos viejos pueden traer un emoji.
+                                 // Si falta o no existe, se deduce por palabras del id/nombre (REGLAS en iconos.js)
   frecuencia?: Frecuencia;       // si falta: tipo === 'semanas' ? 'semanal' : 'mensual'
   tipo?: 'semanas' | 'impuesto' | string;   // LEGADO
   items: { nombre: string; previsto: number }[];

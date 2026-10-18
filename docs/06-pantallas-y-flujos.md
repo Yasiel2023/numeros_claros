@@ -3,9 +3,13 @@ q# 06 — Pantallas y flujos
 ## 1. Navegación
 
 ### 1.1 Web actual (referencia)
-Sidebar con: marca, selector de presupuesto (+ crear, + compartir si es dueño), banner de invitaciones, selector de mes (◀ Mes Año ▶), botón **📸 Cargar comprobante**, menú (Dashboard, Ingresos, una entrada por categoría, Tarjetas, Comprobantes, Resumen, Caja de Ahorro, Preguntas IA, Plantillas, Configuración) y usuario/cerrar sesión. Barra superior con título "{Pantalla} — {Mes Año}" y estado de guardado.
+Un único código con dos diseños según el ancho (`useEsMovil`, corte 900 px).
 
-### 1.2 Móvil propuesta
+**Escritorio:** sidebar con marca, selector de presupuesto (+ crear, + compartir si es dueño), banner de invitaciones, selector de mes, botón **Cargar comprobante** (si la IA está activa), menú (Inicio, Gastos, Carrito, Tarjetas, Ingresos, Comprobantes, Resumen, Caja de ahorro, Preguntas IA, Plantillas y, solo admins, Configuración) y usuario/cerrar sesión. **Gastos** muestra la lista de categorías (con "Nueva categoría") y el detalle de la elegida a su lado. Barra superior con título "{Pantalla} — {Mes Año}" y estado de guardado.
+
+**Celular (implementado, Capacitor):** barra de pestañas `[ Inicio ] [ Gastos ] [ 📷 ] [ Tarjetas ] [ Más ]` (el botón de cámara solo con la IA activa; la pestaña Gastos lleva un contador de pendientes). Una categoría se abre a pantalla completa desde Gastos. **Más** muestra: perfil y presupuesto activo, invitaciones, Carrito, Ingresos, Comprobantes, Resumen del mes, Caja de ahorro, Preguntas a la IA, y la sección Presupuesto: Nueva categoría de gastos, Compartir (dueño), Moneda (dueño), Nuevo presupuesto, Plantillas, Configuración (admins) y Cerrar sesión. Las hojas inferiores centradas en pantallas anchas.
+
+### 1.2 Móvil propuesta (app nativa a futuro)
 
 ```
 Tabs inferiores:  [ Inicio ]  [ Gastos ]  [ (📸) ]  [ Tarjetas ]  [ Más ]
@@ -34,7 +38,8 @@ Para cada pantalla: **Contenido**, **Acciones**, **Estados**. Requisitos en [01]
 - Estados: cargando, error traducido, éxito ("Revisá tu correo…").
 
 ### 2.2 Onboarding (RF-ONB)
-- Paso 1 "Grupos de gastos": lista editable (ícono de una grilla de emojis rápidos, nombre, frecuencia), agregar/quitar.
+- Paso 0 (opcional, con IA activa): usar la plantilla sugerida o **"Armalo con IA"** (texto y/o foto de la planilla). También se eligen moneda principal y secundaria (`SelectorMonedas`).
+- Paso 1 "Grupos de gastos": lista editable (ícono elegido con `SelectorIconoCategoria`, nombre, frecuencia), agregar/quitar.
 - Paso 2 "Items por grupo": por grupo, items con nombre y previsto.
 - Paso 3 "Nombre del presupuesto": nombre y confirmar.
 - Indicador de progreso 1-2-3; volver/siguiente.
@@ -43,6 +48,8 @@ Para cada pantalla: **Contenido**, **Acciones**, **Estados**. Requisitos en [01]
 - *Bottom sheet* "Nuevo mes — {Mes Año}": texto explicativo, selector de plantilla personal (o aviso si no hay), objetivo de ahorro, Cancelar / Iniciar mes.
 
 ### 2.4 Inicio / Dashboard (RF-DASH)
+- **Cómo va el mes** (RF-DASH-5): En débito − Gastos pendientes − Tarjetas de crédito (− las de moneda secundaria con su tasa) = Después de pagar todo; − Ahorro = Libre para gastar. Cada fila abre su pantalla; las tarjetas secundarias sin tasa abren una hoja para poner la tasa.
+- Accesos rápidos: Ticket, Pagar, **Carrito** (abre el carrito general), Preguntar. Con productos montados, un aviso "N productos en el carrito · $X" también abre el carrito.
 - 4 tarjetas KPI (Ingresos, Gastos previstos, Saldo libre, Tarjetas pendientes).
 - "Pagos pendientes" (badge con total; máximo 8; tocar → categoría; atajos a categorías y Tarjetas).
 - "Avance por grupos" con barras; "Ver resumen completo →".
@@ -107,12 +114,19 @@ Para cada pantalla: **Contenido**, **Acciones**, **Estados**. Requisitos en [01]
 - Ejemplos en estado vacío: "¿Cuánto gasté en supermercado este mes vs el anterior?", "¿Cuál fue mi categoría más cara en los últimos 3 meses?", "¿Cuánto gasté en lácteos en los últimos 3 meses?", "¿Cuánto me queda por pagar de la tarjeta?".
 - Estados: "Pensando y consultando tus datos…", error con reintento, sin clave configurada.
 
+### 2.12b Carrito general (RF-CARR-7..9)
+- Resumen violeta: "N productos en el carrito · $total · de K categorías".
+- Botones **Pagar el carrito con el ticket** (abre la carga de comprobante, si la IA está activa) y **Vaciar** (con confirmación; los productos quedan pendientes).
+- Lista de lo montado, agrupada por categoría; tocar un producto lo saca.
+- "Agregar al carrito": una sección plegable por categoría con sus pendientes; tocar un producto lo monta. Así se arma una sola compra con productos de categorías distintas (ej. Supermercado y Aseo).
+- El modo carrito de cada categoría sigue existiendo y comparte la misma marca `enCarrito` de cada item.
+
 ### 2.13 Compartir e invitaciones (RF-COMP)
 - Compartir (solo dueño): email del invitado → Enviar → resultado.
 - Invitaciones pendientes: tarjeta por invitación (presupuesto, de quién) con Aceptar / Rechazar.
 
 ### 2.14 Configuración (RF-CONF)
-- Clave de Groq (oculta/mostrar), URL, modelo, Guardar, Eliminar. Mensaje de estado.
+- Solo administradores. Interruptor "IA activa", URL de Groq, modelo de chat y Guardar (`sistema/ia`). No hay campo de clave: es un secreto del Worker. Mensaje de estado.
 
 ## 3. Lineamientos visuales
 
@@ -127,4 +141,6 @@ Para cada pantalla: **Contenido**, **Acciones**, **Estados**. Requisitos en [01]
 
 - Ícono de la app: cuadrado `#0D9488` con "$" blanco (archivos en `public/icon-*.png`).
 - Íconos de interfaz: Lucide (`lucide-react-native` en móvil).
-- Emojis como íconos de categoría (elegidos por el usuario).
+- Íconos de categoría: ya no son emojis sino claves de `src/iconos.js` (trazos del prototipo + Lucide), elegidas con un selector agrupado, con color propio por ícono; si la categoría no tiene ícono se deduce del nombre.
+- Íconos de interfaz: `Icono` de `src/iconos.js` (24×24, trazo sin relleno).
+- Las hojas inferiores del celular son una columna con altura máxima: sus hijos no se encogen (`.hoja > * { flex-shrink: 0 }`) para que los botones conserven su alto.

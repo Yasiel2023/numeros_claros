@@ -56,14 +56,18 @@ Construir la **app móvil nativa** (Android primero, iOS después) con **paridad
 - Modo offline completo (v1: lectura cacheada por el SDK, escritura requiere conexión).
 - Notificaciones push (vencimientos, saldo bajo) — candidatas para v1.1.
 - Guardar la foto del ticket (hoy no se guarda; requeriría Firebase Storage).
-- Multimoneda en gastos (los gastos son siempre UYU).
+- Multimoneda en gastos: los gastos e ingresos están siempre en la **moneda principal** del presupuesto; solo las tarjetas, cuotas y la caja de ahorro pueden estar en la moneda secundaria.
 
 ## 5. Restricciones
 
 - **Backend existente**: Firebase (proyecto `numeros-claros`) con Realtime Database + Authentication (email/contraseña) + Hosting. No hay servidor propio.
 - **Datos existentes en producción** que no se pueden migrar libremente (ver formatos legados en [03](./03-modelo-de-datos.md)).
-- **IA**: Groq (API compatible con OpenAI). Visión con `qwen/qwen3.8-27b`; chat con el modelo configurado por el usuario (por defecto `openai/gpt-oss-120b`).
-- **Costos**: se prioriza el plan gratuito de Groq y de Firebase. Mover la IA a Cloud Functions requiere el plan Blaze de Firebase (pago por uso).
+- **IA**: Groq (API compatible con OpenAI) detrás de un **Worker de Cloudflare** (`ia-worker/`). Visión con `qwen/qwen3.8-27b`; chat con el modelo que fija el administrador en `sistema/ia/groq_model` (por defecto `openai/gpt-oss-120b`). Los usuarios no cargan clave propia.
+- **Costos**: se prioriza el plan gratuito de Groq, Firebase y Cloudflare Workers. Se eligió Cloudflare justamente para no necesitar el plan Blaze de Firebase (Cloud Functions).
+
+## 5.1 Estado actual de la app móvil
+
+Ya existe una app Android: la misma web empaquetada con **Capacitor 8** (`android/`, id `uy.numerosclaros.app`) que, con pantalla ≤ 900 px, muestra un **diseño propio de celular** (barra de pestañas Inicio · Gastos · cámara · Tarjetas · Más). Comparte código, base de datos y reglas con la web. La app nativa con Expo descrita en [04](./04-arquitectura.md) y [08](./08-plan-de-implementacion.md) sigue siendo el objetivo a futuro, pero la versión Capacitor es la que está en uso hoy (ver [04 ADR-007](./04-arquitectura.md#adr-007--capacitor-como-app-móvil-actual)).
 
 ## 6. Supuestos
 

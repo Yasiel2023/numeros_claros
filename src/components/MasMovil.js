@@ -42,6 +42,7 @@ export default function MasMovil({
       )}
 
       <div className="mas-grupo">
+        <Fila icono="carrito" color="violeta" texto="Carrito" onClick={() => onIr('carrito')} />
         <Fila icono="ingresos" texto="Ingresos" onClick={() => onIr('ingresos')} />
         <Fila icono="recibo" color="violeta" texto="Comprobantes" onClick={() => onIr('comprobantes')} />
         <Fila icono="resumen" color="azul" texto="Resumen del mes" onClick={() => onIr('resumen')} />
